@@ -13,34 +13,28 @@
 #include "geometry_msgs/msg/pose_array.hpp"
 
 
-// Destructor of the RRT class
+// Destructor of the RRT classFalse
 RRT::~RRT() {
     // Do something in here, free up used memory, print message, etc.
     RCLCPP_INFO(rclcpp::get_logger("RRT"), "%s\n", "RRT shutting down");
 }
-
 // Constructor of the RRT class
 RRT::RRT(): rclcpp::Node("rrt_node"), gen((std::random_device())()) {
-    // ROS publishers
-    //For vizualization
+    //User Input
+    bool sim = false; //Changes the subscription topics
+
+    // ROS publishers for rviz
     grid_pub = this->create_publisher<nav_msgs::msg::OccupancyGrid>("/rrt_occugrid_rviz",1);
     rrt_rviz = this->create_publisher<visualization_msgs::msg::Marker>("/rrt_node_connections_rviz",1);
     rrt_path_rviz = this->create_publisher<visualization_msgs::msg::Marker>("/rrt_path_connections_rviz",1);
     goal_pub = this->create_publisher<visualization_msgs::msg::Marker>("/rrt_goal_point_rviz",1);
     node_pub = this->create_publisher<visualization_msgs::msg::MarkerArray>("/rrt_all_nodes_rviz",1);
-    path_pub = this->create_publisher<visualization_msgs::msg::MarkerArray>("/rrt_path_nodes_rviz",1);
 
-    grid_path_pub = this->create_publisher<nav_msgs::msg::OccupancyGrid>("/rrt__path_occugrid_rviz",1);
-    use_rrt_pub = this->create_publisher<std_msgs::msg::Bool>("/use_rrt",1);
-
-    //local_goal_pub = this->create_publisher<nav_msgs::msg::Odometry>("/rrt_local_goal",1);
-
-    spline_points_pub = this->create_publisher<geometry_msgs::msg::PoseArray>("/rrt_spline_points",1);
+    //ROS Publishers to talk to pure pursuit
+    spline_points_pub = this->create_publisher<geometry_msgs::msg::PoseArray>("/rrt_spline_points",1); //Returned RRT spline points
 
     // ROS subscribers
-    // TODO: create subscribers as you need
-    bool topic_name = true;  // Set flag true for simulation, false for real
-    if(topic_name == true){
+    if(sim == true){
         string pose_topic = "ego_racecar/odom";
         pose_sub_ = this->create_subscription<nav_msgs::msg::Odometry>(pose_topic, 1, std::bind(&RRT::pose_callback, this, std::placeholders::_1));
     }
@@ -51,24 +45,17 @@ RRT::RRT(): rclcpp::Node("rrt_node"), gen((std::random_device())()) {
     
     string scan_topic = "/scan";
     string global_goal_topic = "/global_goal_pure_pursuit";
-    string standoff_topic = "/standoff_dist_pure_pursuit";
 
     scan_sub_ = this->create_subscription<sensor_msgs::msg::LaserScan>(
     scan_topic, 1, std::bind(&RRT::scan_callback, this, std::placeholders::_1));
-
     global_goal_sub_ = this->create_subscription<nav_msgs::msg::Odometry>(
     global_goal_topic, 1, std::bind(&RRT::global_goal_callback, this, std::placeholders::_1));
 
-    pure_pursuit_standoff_ = this->create_subscription<std_msgs::msg::Float32>(
-    standoff_topic, 1, std::bind(&RRT::standoff_callback, this, std::placeholders::_1));
-
     previous_time = rclcpp::Clock().now();
-
-    // TODO: create a occupancy grid
     RCLCPP_INFO(rclcpp::get_logger("RRT"), "%s\n", "Created new RRT Object.");
 
     //Read in spline points
-    std::string file_name = "/sim_ws/src/pure_pursuit/scripts/spline.csv";
+    std::string file_name = "src/f1tenth_icra2022/pure_pursuit_pkg/pure_pursuit_pkg/racelines/temp/spline.csv";
     std::vector<float> row;
     std::string line, number;
     std::fstream file (file_name, ios::in);
@@ -87,16 +74,133 @@ RRT::RRT(): rclcpp::Node("rrt_node"), gen((std::random_device())()) {
         std::cout<<"ERROR_ERROR_ERROR"<<std::endl;
         std::cout<<"RRT.CPP Failed to open spline csv"<<std::endl;
     }
-
+    q.x()= 0;
+    q.y()= 0;
+    q.z()= 0;
+    q.w()= 1;
+    rotation_mat = q.normalized().toRotationMatrix();
 }
-void RRT::standoff_callback(const std_msgs::msg::Float32::ConstSharedPtr l_dist){
-    l_value = l_dist->data;
+
+/// MAIN CALLBACK FUNCTIONS///
+void RRT::scan_callback(const sensor_msgs::msg::LaserScan::ConstSharedPtr scan_msg) {
+    // Receive a scan message and update the occupancy grid
+    // Args:
+    //    scan_msg (*LaserScan): pointer to the incoming scan message
+    // Returns:
+    //    occu_grid_flat: A new occupancy grid
+
+    //std::cout<<"Scan callback"<<std::endl;
+    int x_scan;
+    int y_scan;
+    std::memset(occu_grid, 0, sizeof occu_grid);
+    std::vector<signed char> occu_grid_flat(occu_grid_y_size * occu_grid_x_size);
+
+    //Build the occupancy grid
+    for(int i=0; i<scan_msg->ranges.size(); i++){
+        if (std::isnan(scan_msg->ranges[i])==false && std::isinf(scan_msg->ranges[i])==false && scan_msg->ranges[i]!=0){
+
+            x_scan = scan_msg->ranges[i] * cos(scan_msg->angle_increment * i + scan_msg->angle_min) / resolution;
+            y_scan = scan_msg->ranges[i] * sin(scan_msg->angle_increment * i + scan_msg->angle_min) / resolution;
+
+            //Make the scans show up larger on the occupancy grid
+            for(int j=-1 + x_scan;j<1+ x_scan;j++){//8
+                for(int k=-1 + y_scan;k<1 + y_scan;k++){
+                    if(j+center_x >0 && j+center_x <occu_grid_x_size){
+                        if(k+center_y >0 && k+center_y <occu_grid_y_size){
+                            occu_grid[(j+center_x)][occu_grid_y_size-(k+center_y)]=100;
+                            occu_grid_flat[((k  + center_y)* occu_grid_x_size) + (j + center_x)]=100;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    /* Set scans around the car to open - prevents issues with RRT path search
+    for(int i=-1;i<=1;i++){
+        for(int j=-1;j<=1;j++){
+            occu_grid[(j+center_x)][occu_grid_y_size-(i+center_y)]=0;
+            occu_grid_flat[((j  + center_y)* occu_grid_x_size) + (i + center_x)]=0;
+        }
+    }
+    */
+
+
+    auto new_grid= nav_msgs::msg::OccupancyGrid();
+    new_grid.info.resolution=resolution;
+    new_grid.info.width=occu_grid_x_size;
+    new_grid.info.height=occu_grid_y_size;
+    std::string frame_id="map";
+    new_grid.header.frame_id=frame_id;
+    new_grid.header.stamp=rclcpp::Clock().now();
+    new_grid.info.origin = current_car_pose.pose.pose;
+
+    Eigen::Vector3d shift_coords(center_x * resolution, center_y* resolution, 0);
+    Eigen::Vector3d shift_in_global_coords = rotation_mat * shift_coords;
+
+    new_grid.info.origin.position.x-= shift_in_global_coords[0];
+    new_grid.info.origin.position.y-= shift_in_global_coords[1];
+
+    rclcpp::Time current_time = rclcpp::Clock().now();
+
+    new_grid.data= occu_grid_flat;
+    grid_pub->publish(new_grid);
 }
 
+void RRT::pose_callback(const nav_msgs::msg::Odometry::ConstSharedPtr pose_msg) {
+    // The pose callback when subscribed to particle filter's inferred pose
+    // The RRT main loop happens here
+    // Args:
+    //    pose_msg (*PoseStamped): pointer to the incoming pose message
+    // Returns:
+    //    An updated position and rotation of the car, q and rotation_mat
+    //    Performs rrt and returns the path
+
+    current_car_pose = *pose_msg;
+    q.x()= current_car_pose.pose.pose.orientation.x;
+    q.y()= current_car_pose.pose.pose.orientation.y;
+    q.z()= current_car_pose.pose.pose.orientation.z;
+    q.w()= current_car_pose.pose.pose.orientation.w;
+    rotation_mat = q.normalized().toRotationMatrix();
+
+    //Update rrt if using RRT is required
+    try{
+        rclcpp::Time current_time = rclcpp::Clock().now();
+        if((current_time - previous_time).seconds() > update_rate && rrt_use_it == true){
+            previous_time = current_time;
+            found_path = false;
+            final_path_output = perform_rrt();
+        }
+        else{
+            found_path = true;
+        }
+        //Convert Local coordinates to global coordinates for pure pursuit
+        if(found_path == true && message_sent == false){
+            message_sent = true;
+            geometry_msgs::msg::PoseArray goal_path_points;
+            goal_path_points.header.frame_id = "map";
+            geometry_msgs::msg::Pose point_value;
+            for (int i=0; i<final_path_output.size(); i++){
+                Eigen::Vector3d shift_coords(final_path_output[i].x, final_path_output[i].y, 0);
+                Eigen::Vector3d global_coords = rotation_mat * shift_coords;
+                point_value.position.x = current_car_pose.pose.pose.position.x + float(global_coords[0]);
+                point_value.position.y = current_car_pose.pose.pose.position.y + float(global_coords[1]);
+                point_value.position.z= final_path_output.size();
+                goal_path_points.poses.push_back(point_value);
+            }
+            spline_points_pub->publish(goal_path_points);
+        }
+    }
+    catch(...){
+        std::cout<<"IN Catch"<<std::endl;
+    }
+}
+
+/// SECONDARY CALLBACK FUNCTION///
 void RRT::global_goal_callback(const nav_msgs::msg::Odometry::ConstSharedPtr goal_msg){
     global_goal = *goal_msg; 
 }
 
+///////////////// RRT FUNCTIONS /////////////////
 std::vector<std::vector<int>> RRT::bresenhams_line_algorithm(int goal_point[2], int origin_point[2]){
     try{
         int x1 = origin_point[0];
@@ -166,194 +270,6 @@ std::vector<std::vector<int>> RRT::bresenhams_line_algorithm(int goal_point[2], 
     }
     
 }
-void RRT::check_to_activate_rrt(std::vector<signed char> &obstacle_data){
-    try{    
-        //std::cout<<"check to activate rrt"<<std::endl;
-        Eigen::Quaterniond q;
-        q.x()= current_car_pose.pose.pose.orientation.x;
-        q.y()= current_car_pose.pose.pose.orientation.y;
-        q.z()= current_car_pose.pose.pose.orientation.z;
-        q.w()= current_car_pose.pose.pose.orientation.w;
-
-        auto rotation_mat = q.normalized().toRotationMatrix();
-        //std::cout<<"Got Rotation"<<std::endl;
-        float x_goal = global_goal.pose.pose.position.x - current_car_pose.pose.pose.position.x;
-        float y_goal = global_goal.pose.pose.position.y - current_car_pose.pose.pose.position.y; 
-
-        Eigen::Vector3d shift_coords(x_goal, y_goal, 0);
-        Eigen::Vector3d local_goal_ = rotation_mat.inverse() * shift_coords;
-        //std::cout<<"1"<<std::endl;
-        int goal_point[2]={(local_goal_[0]/resolution)+center_x,(local_goal_[1]/resolution)+center_y};
-        int origin_point[2]={center_x, center_y};
-        std::vector<std::vector<int>> grid_interp_points;
-        //std::cout<<"2"<<std::endl;
-        grid_interp_points = bresenhams_line_algorithm(goal_point,origin_point);
-
-        //Make Interp Points Wider
-        //Add 9 cm to each side
-        int add_val_x = abs((0.025 / resolution)); //0.1
-        int add_val_y = abs((0.025 / resolution)); //0.1
-        //std::cout<<"3"<<std::endl;
-        if(add_val_x==0){
-            add_val_x=1;
-        }
-        if(add_val_y==0){
-            add_val_y=1;
-        }
-        int size_val= grid_interp_points.size();
-        //std::cout<<"4"<<std::endl;
-        for(int i=0;i<size_val;i++){
-            for(int j=-add_val_y;j<add_val_y;j++){
-                for(int k=-add_val_x;k<add_val_x;k++){
-                    if(grid_interp_points[i][0]+k >0 && grid_interp_points[i][0]+k <occu_grid_x_size){
-                        if( grid_interp_points[i][1]+j >0 && grid_interp_points[i][1]+j <occu_grid_y_size){
-                            int x_val = grid_interp_points[i][0]+k;
-                            int y_val = grid_interp_points[i][1]+j;
-                            std::vector<int> add_points{x_val,y_val};
-                            if(x_val >0 && x_val <occu_grid_x_size){
-                                if( y_val >0 && y_val <occu_grid_y_size){
-                                    grid_interp_points.push_back(add_points);
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        } 
-        //std::cout<<"5"<<std::endl;
-        //Make Current Position Wider, in case there is an obstacle adjacent to the car
-        for(int i=3;i<5;i++){// 5 25
-            for(int j=-2;j<2;j++){//5 5
-                if(i+center_x >0 && i+center_x <occu_grid_x_size){
-                    if(j+center_y >0 && j+center_y <occu_grid_y_size){
-                        int x_val = center_x+i;
-                        int y_val = center_y+j;
-                        std::vector<int> add_points{x_val,y_val};
-                        grid_interp_points.push_back(add_points);
-                    }
-                }
-            }
-        }
-        //std::cout<<"6"<<std::endl;
-
-        std::vector<signed char> listed_data(occu_grid_y_size * occu_grid_x_size);
-
-        
-        for(int i=0;i<grid_interp_points.size();i++){
-            if(grid_interp_points[i][1] >= 0 && grid_interp_points[i][0] >= 0){
-                //if( ((grid_interp_points[i][1])* occu_grid_x_size) + (grid_interp_points[i][0]) < (occu_grid_x_size * occu_grid_y_size)){
-                    if(((grid_interp_points[i][1])* occu_grid_x_size) + (grid_interp_points[i][0]) <listed_data.size()){
-                        listed_data[((grid_interp_points[i][1])* occu_grid_x_size) + (grid_interp_points[i][0])]=100;
-                    }
-                //}
-            }
-        }
-        //std::cout<<"7"<<std::endl;
-        rrt_use_it=false;
-        //int hit_count=0;
-        for(int i=0;i<listed_data.size();i++){
-            if(listed_data[i]==100 && i < obstacle_data.size() && obstacle_data[i]==100){
-                //hit_count++;
-                rrt_use_it = true;
-                break;
-            }
-        }
-    
-        auto new_grid= nav_msgs::msg::OccupancyGrid();
-
-        new_grid.info.resolution=  resolution;
-        new_grid.info.width=occu_grid_x_size;
-        new_grid.info.height=occu_grid_y_size;
-        //std::cout<<"10"<<std::endl;
-        std::string frame_id="map";
-        new_grid.header.frame_id=frame_id;
-        new_grid.header.stamp=rclcpp::Clock().now();
-        new_grid.info.origin = current_car_pose.pose.pose;
-        //std::cout<<"11"<<std::endl;
-        Eigen::Vector3d shift_coords1(center_x * resolution, center_y* resolution, 0);
-        Eigen::Vector3d shift_in_global_coords = rotation_mat * shift_coords1;
-
-        new_grid.info.origin.position.x-= shift_in_global_coords[0];
-        new_grid.info.origin.position.y-= shift_in_global_coords[1];
-        //std::cout<<"12"<<std::endl;
-        new_grid.data= listed_data;
-        grid_path_pub->publish(new_grid);
-        //std::cout<<"13"<<std::endl;
-        auto use_rrt= std_msgs::msg::Bool();
-        use_rrt.data = rrt_use_it;
-        use_rrt_pub->publish(use_rrt);
-        //std::cout<<"14"<<std::endl;
-    }
-    catch(...){
-        std::cout<<"RRT ACTIVATION FAILED"<<std::endl;
-    }
-    //std::cout<<"End Check to activate rrt"<<std::endl;
-}
-
-void RRT::scan_callback(const sensor_msgs::msg::LaserScan::ConstSharedPtr scan_msg) {
-    // The scan callback, update your occupancy grid here
-    // Args:
-    //    scan_msg (*LaserScan): pointer to the incoming scan message
-    // Returns:
-    //
-    // TODO: update your occupancy grid
-    //std::cout<<"In Scan Callback"<<std::endl;
-    int x_scan;
-    int y_scan;
-    std::memset(occu_grid, 0, sizeof occu_grid);
-    std::vector<signed char> listed_data(occu_grid_y_size * occu_grid_x_size);
-    for(int i=0; i<scan_msg->ranges.size(); i++){
-        if (std::isnan(scan_msg->ranges[i])==false && std::isinf(scan_msg->ranges[i])==false && scan_msg->ranges[i]!=0){
-
-            x_scan = scan_msg->ranges[i] * cos(scan_msg->angle_increment * i + scan_msg->angle_min) / resolution;
-            y_scan = scan_msg->ranges[i] * sin(scan_msg->angle_increment * i + scan_msg->angle_min) / resolution;
-
-            //Make the scans show up larger on the occupancy grid
-            for(int j=-2 + x_scan;j<2+ x_scan;j++){//8
-                for(int k=-2 + y_scan;k<2 + y_scan;k++){
-                    if(j+center_x >0 && j+center_x <occu_grid_x_size){
-                        if(k+center_y >0 && k+center_y <occu_grid_y_size){
-                            occu_grid[(j+center_x)][occu_grid_y_size-(k+center_y)]=100;
-                            listed_data[((k  + center_y)* occu_grid_x_size) + (j + center_x)]=100;
-                            //occu_grid_flat[((k  + center_y)* occu_grid_x_size) + (j + center_x)]=100;
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    auto new_grid= nav_msgs::msg::OccupancyGrid();
-
-    new_grid.info.resolution=  resolution;
-    new_grid.info.width=occu_grid_x_size;
-    new_grid.info.height=occu_grid_y_size;
-
-    std::string frame_id="map";
-    new_grid.header.frame_id=frame_id;
-    new_grid.header.stamp=rclcpp::Clock().now();
-    new_grid.info.origin = current_car_pose.pose.pose;
-
-    Eigen::Quaterniond q;
-    q.x()= current_car_pose.pose.pose.orientation.x;
-    q.y()= current_car_pose.pose.pose.orientation.y;
-    q.z()= current_car_pose.pose.pose.orientation.z;
-    q.w()= current_car_pose.pose.pose.orientation.w;
-
-    auto rotation_mat = q.normalized().toRotationMatrix();
-
-    Eigen::Vector3d shift_coords(center_x * resolution, center_y* resolution, 0);
-    Eigen::Vector3d shift_in_global_coords = rotation_mat * shift_coords;
-
-    new_grid.info.origin.position.x-= shift_in_global_coords[0];
-    new_grid.info.origin.position.y-= shift_in_global_coords[1];
-
-    new_grid.data= listed_data;
-    grid_pub->publish(new_grid);
-
-    check_to_activate_rrt(listed_data);
-    //std::cout<<"out of scan callback"<<std::endl;
-}
 
 std::vector<RRT_Node> RRT::perform_rrt(){
     try{
@@ -363,24 +279,17 @@ std::vector<RRT_Node> RRT::perform_rrt(){
         int increment = 1;
         int increment_val = 1;
         int max_loops=4;
-        
-        std::vector<RRT_Node> output_path;
-        
-        while(continue_searching == true){
-            Eigen::Quaterniond q;
-            q.x()= current_car_pose.pose.pose.orientation.x;
-            q.y()= current_car_pose.pose.pose.orientation.y;
-            q.z()= current_car_pose.pose.pose.orientation.z;
-            q.w()= current_car_pose.pose.pose.orientation.w;
-            auto rotation_mat = q.normalized().toRotationMatrix();
 
+        std::vector<RRT_Node> output_path;
+        while(continue_searching == true){
             float x_goal;
             float y_goal;
-            
+
             std::vector<RRT_Node> tree;
             std::vector<double> sampled_point;
             std::vector<double> parent_vec;
             std::vector<RRT_Node> path;
+
             // Add starting pose to the tree
             struct RRT_Node x_0 = {0.0, 0.0};
             x_0.parent = -1; //set the parent of the base node to -1 for detecting path completion in find_path()
@@ -391,6 +300,7 @@ std::vector<RRT_Node> RRT::perform_rrt(){
             int node_nearest;
             bool collision;
             bool goal_flag;
+
             //Take the pure_pursuit goal in the initial loop
             if(loop_count==0){
                 x_goal = global_goal.pose.pose.position.x - current_car_pose.pose.pose.position.x;
@@ -408,11 +318,9 @@ std::vector<RRT_Node> RRT::perform_rrt(){
                 if (spline_index ==-10000){
                     //std::cout<<"No path was found, resorting back to original goal"<<std::endl;
                     x_goal = global_goal.pose.pose.position.x - current_car_pose.pose.pose.position.x;
-                    y_goal = global_goal.pose.pose.position.y - current_car_pose.pose.pose.position.y; 
-                 //   std::cout<<"in spline 1000"<<std::endl;
+                    y_goal = global_goal.pose.pose.position.y - current_car_pose.pose.pose.position.y;
                 }
                 else{
-                    
                     int index_val = spline_index - increment;
                     //Make sure the chosen spline index is a realistic value
                     if(index_val < 0){
@@ -431,10 +339,8 @@ std::vector<RRT_Node> RRT::perform_rrt(){
 
             Eigen::Vector3d shift_coords(x_goal, y_goal, 0);
             Eigen::Vector3d local_goal_ = rotation_mat.inverse() * shift_coords;
-
             x_goal = local_goal_[0];
             y_goal = local_goal_[1];
-
             //std::cout<<"Local goal x: "<<x_goal <<", Local goal y: "<< y_goal <<std::endl;
             std::vector<RRT_Node> final_path;
 
@@ -481,7 +387,7 @@ std::vector<RRT_Node> RRT::perform_rrt(){
             goal_flag = is_goal(node_new, x_goal, y_goal);
             if (goal_flag == true){
                 message_sent = false;
-                //std::cout<<"New Node: (X, Y)= "<<node_new.x<<", "<<node_new.y<<std::endl;          
+                //std::cout<<"New Node: (X, Y)= "<<node_new.x<<", "<<node_new.y<<std::endl;
                 found_path=true;
                 continue_searching = false;
                 path = find_path(tree, node_new);  // Find the path
@@ -490,7 +396,7 @@ std::vector<RRT_Node> RRT::perform_rrt(){
                 update_rrt_rviz(tree);
 
                 update_goal_point(x_goal, y_goal);
-                //std::cout<<"Path found"<<std::endl;
+                std::cout<<"Path found"<<std::endl;
                 output_path = path;
                 return output_path;
                 //break;
@@ -501,86 +407,17 @@ std::vector<RRT_Node> RRT::perform_rrt(){
         loop_count++;
         if(loop_count > max_loops){
             found_path = false;
-            //std::cout<<"No Path Found"<<std::endl;
+            std::cout<<"No Path Found"<<std::endl;
+            message_sent = false;
             continue_searching= false;
+
         }
     }
-
-        
     return output_path;
-        
     }
     catch(...){
         std::cout<<"IN THE CATCH, RRT FUNCTION FAILED"<<std::endl;
     }
-}
-
-void RRT::pose_callback(const nav_msgs::msg::Odometry::ConstSharedPtr pose_msg) {
-    // The pose callback when subscribed to particle filter's inferred pose
-    // The RRT main loop happens here
-    // Args:
-    //    pose_msg (*PoseStamped): pointer to the incoming pose message
-    // Returns:
-    //
-    //std::cout<<"***in pose callback***"<<std::endl;
-    // tree as std::vector
-    current_car_pose = *pose_msg;
-
-    //Update rrt according to update rate interval
-
-    try{
-        rclcpp::Time current_time = rclcpp::Clock().now();
-        if((current_time - previous_time).seconds() > update_rate && rrt_use_it == true){
-            previous_time = current_time;
-            found_path = false;
-            rclcpp::Time atime = rclcpp::Clock().now();
-            final_path_output = perform_rrt();
-            rclcpp::Time btime = rclcpp::Clock().now();
-            float tt = (atime - btime).seconds();
-            std::cout<<"Time to execute RRT*"<<tt<<std::endl;
-        }
-        else{
-            found_path = true;
-        }
-
-        //Convert Local coordinates to global coordinates for pure pursuit
-        Eigen::Quaterniond q;
-        q.x()= current_car_pose.pose.pose.orientation.x;
-        q.y()= current_car_pose.pose.pose.orientation.y;
-        q.z()= current_car_pose.pose.pose.orientation.z;
-        q.w()= current_car_pose.pose.pose.orientation.w;
-
-        auto rotation_mat = q.normalized().toRotationMatrix();
-       // std::cout<<"starting found path check"<<std::endl;
-        if(found_path == true && message_sent == false){
-            // std::cout<<"in if"<<std::endl;
-            message_sent = true;
-            geometry_msgs::msg::PoseArray goal_path_points;
-            goal_path_points.header.frame_id = "map";
-
-            geometry_msgs::msg::Pose point_value;
-            // std::cout<<"for loop"<<std::endl;
-            for (int i=0; i<final_path_output.size(); i++){
-
-                Eigen::Vector3d shift_coords(final_path_output[i].x, final_path_output[i].y, 0);
-                Eigen::Vector3d global_coords = rotation_mat * shift_coords;
-                point_value.position.x = current_car_pose.pose.pose.position.x + float(global_coords[0]);
-                point_value.position.y = current_car_pose.pose.pose.position.y + float(global_coords[1]);
-                point_value.position.z= final_path_output.size();
-                goal_path_points.poses.push_back(point_value);
-            } 
-            //std::cout<<"past loop"<<std::endl;
-            spline_points_pub->publish(goal_path_points);
-        }
-        //else{
-        //     std::cout<<"else"<<std::endl;
-        //}
-    }
-    catch(...){
-        std::cout<<"IN Catch"<<std::endl;
-    }
-    //path found as Path message
-    // std::cout<<"End of Function"<<std::endl;
 }
 
 std::vector<double> RRT::sample() {
@@ -658,7 +495,6 @@ RRT_Node RRT::steer(RRT_Node &nearest_node, std::vector<double> &sampled_point) 
 
     RRT_Node new_node;
 
-    // TODO: fill in this method
     double dx = sampled_point[0] - nearest_node.x;
     double dy = sampled_point[1] - nearest_node.y;
     double angle = atan2(dy,dx);
@@ -668,15 +504,6 @@ RRT_Node RRT::steer(RRT_Node &nearest_node, std::vector<double> &sampled_point) 
 
     new_node.x = dx_new + nearest_node.x;
     new_node.y = dy_new + nearest_node.y;
-
-    /*
-    // Debugging stuff
-    std::cout<<"***************************************"<<std::endl;
-    std::cout<<"Nearest point x: "<<nearest_node.x<<"  y: " <<nearest_node.y<<std::endl;
-    std::cout<<"Sampled point x: "<<sampled_point[0]<<"  y: " <<sampled_point[1]<<std::endl;
-    std::cout<<"New point x: "<<new_node.x<<"  y: " <<new_node.y<<std::endl;
-    std::cout<<"^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^"<<std::endl;
-    */
 
     return new_node;
 }
@@ -743,9 +570,6 @@ bool RRT::check_collision(RRT_Node &nearest_node, RRT_Node &new_node) {
             y0 = y0 + sy;
         }
     }
-
-    //std::cout<<"collision: "<< collision<<std::endl;
-
     return collision;
 }
 
@@ -797,7 +621,6 @@ bool RRT::is_goal(RRT_Node &node, double goal_x, double goal_y) {
     return found_path;
 }
 
-///////////////// RRT* Functions /////////////////
 double RRT::cost(std::vector<RRT_Node> &tree, RRT_Node &newnode) {
     // This method returns the cost associated with a node
     // Args:
@@ -863,16 +686,9 @@ std::vector<int> RRT::near(std::vector<RRT_Node> &tree, RRT_Node &node) {
     return neighborhood;
 }
 
-//VIZUALIZATION
+/// VIZUALIZATION FUNCTIONS ///////////////////////////////////////////////
 void RRT::update_rrt_rviz(std::vector<RRT_Node> &tree){
         auto message = visualization_msgs::msg::Marker();
-
-        Eigen::Quaterniond q;
-        q.x()= current_car_pose.pose.pose.orientation.x;
-        q.y()= current_car_pose.pose.pose.orientation.y;
-        q.z()= current_car_pose.pose.pose.orientation.z;
-        q.w()= current_car_pose.pose.pose.orientation.w;
-        auto rotation_mat = q.normalized().toRotationMatrix();
 
         Eigen::Vector3d shift_coords(tree[0].x, tree[0].y, 0);
         Eigen::Vector3d shift_in_global_coords = rotation_mat.inverse() * shift_coords;
@@ -923,13 +739,6 @@ void RRT::update_rrt_rviz(std::vector<RRT_Node> &tree){
 void RRT::update_rrt_path_lines(std::vector<RRT_Node> &tree, std::vector<RRT_Node> &path){
         auto message = visualization_msgs::msg::Marker();
 
-        Eigen::Quaterniond q;
-        q.x()= current_car_pose.pose.pose.orientation.x;
-        q.y()= current_car_pose.pose.pose.orientation.y;
-        q.z()= current_car_pose.pose.pose.orientation.z;
-        q.w()= current_car_pose.pose.pose.orientation.w;
-        auto rotation_mat = q.normalized().toRotationMatrix();
-
         Eigen::Vector3d shift_coords(path[0].x, path[0].y, 0);
         Eigen::Vector3d shift_in_global_coords = rotation_mat * shift_coords;
         message.header.frame_id="map";
@@ -976,55 +785,8 @@ void RRT::update_rrt_path_lines(std::vector<RRT_Node> &tree, std::vector<RRT_Nod
         }
 }
 
-void RRT::update_path(std::vector<RRT_Node> &path){
-        auto message = visualization_msgs::msg::MarkerArray();
-        Eigen::Quaterniond q;
-        q.x()= current_car_pose.pose.pose.orientation.x;
-        q.y()= current_car_pose.pose.pose.orientation.y;
-        q.z()= current_car_pose.pose.pose.orientation.z;
-        q.w()= current_car_pose.pose.pose.orientation.w;
-        auto rotation_mat = q.normalized().toRotationMatrix();
-
-        for(int i=0; i<path.size();i++){
-            //Find position of marker
-            Eigen::Vector3d shift_coords(path[i].x, path[i].y, 0);
-            Eigen::Vector3d shift_in_global_coords = rotation_mat * shift_coords;
-
-            auto marker = visualization_msgs::msg::Marker();
-            marker.header.frame_id="map";
-            marker.type= visualization_msgs::msg::Marker::SPHERE;
-            marker.action = visualization_msgs::msg::Marker::ADD;
-            marker.scale.x= 0.1;
-            marker.scale.y= 0.1;
-            marker.scale.z= 0.1;
-            marker.pose.position.x= current_car_pose.pose.pose.position.x + shift_in_global_coords[0] ;
-            marker.pose.position.y= current_car_pose.pose.pose.position.y + shift_in_global_coords[1];
-            marker.pose.position.z=0.0;
-            marker.color.a=1.0;
-            marker.color.r=1.0;
-            marker.color.b=0.0;
-            marker.color.g=0.0;
-            marker.pose.orientation.x=0.0;
-            marker.pose.orientation.y=0.0;
-            marker.pose.orientation.z=0.0;
-            marker.pose.orientation.w=1.0;
-            marker.lifetime.nanosec=int(1e8);
-            marker.header.stamp = rclcpp::Clock().now();
-            marker.id=i;
-
-            message.markers.push_back(marker);
-        }
-        path_pub->publish(message);
-}
-
 void RRT::update_nodes(std::vector<RRT_Node> &tree){
         auto message = visualization_msgs::msg::MarkerArray();
-        Eigen::Quaterniond q;
-        q.x()= current_car_pose.pose.pose.orientation.x;
-        q.y()= current_car_pose.pose.pose.orientation.y;
-        q.z()= current_car_pose.pose.pose.orientation.z;
-        q.w()= current_car_pose.pose.pose.orientation.w;
-        auto rotation_mat = q.normalized().toRotationMatrix();
         //std::cout<<"Size of tree: "<<tree.size()<<std::endl;
 
         for(int i=0; i<tree.size();i++){
@@ -1063,13 +825,6 @@ void RRT::update_nodes(std::vector<RRT_Node> &tree){
 void RRT::update_goal_point(float goal_point_x, float goal_point_y){
         auto message = visualization_msgs::msg::Marker();
 
-        Eigen::Quaterniond q;
-        q.x()= current_car_pose.pose.pose.orientation.x;
-        q.y()= current_car_pose.pose.pose.orientation.y;
-        q.z()= current_car_pose.pose.pose.orientation.z;
-        q.w()= current_car_pose.pose.pose.orientation.w;
-        auto rotation_mat = q.normalized().toRotationMatrix();
-
         Eigen::Vector3d shift_coords(goal_point_x, goal_point_y, 0);
         Eigen::Vector3d shift_in_global_coords = rotation_mat * shift_coords;
 
@@ -1096,4 +851,20 @@ void RRT::update_goal_point(float goal_point_x, float goal_point_y){
         message.id=0;
 
         goal_pub->publish(message);
+}
+int RRT::find_spline_index(float x, float y){
+/*
+Returns the index of the closest point on the spline to (x,y)
+*/
+    float spline_index=-10000;
+    float min_val = 1000;
+
+    for(int i=0;i<spline_points.size();i++){
+    float dist = sqrt(pow(abs(x - spline_points[i][0]), 2)  + pow(abs(y - spline_points[i][1]), 2));
+        if(dist < min_val){
+            spline_index=i;
+            min_val = dist;
+        }
+    }
+    return spline_index;
 }

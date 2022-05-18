@@ -1,6 +1,6 @@
 from setuptools import setup
 
-package_name = 'pure_pursuit'
+package_name = 'pure_pursuit_pkg'
 
 setup(
     name=package_name,
@@ -15,12 +15,12 @@ setup(
     zip_safe=True,
     maintainer='Archit Hardikar',
     maintainer_email='architnh@seas.upenn.edu',
-    description='f1tenth perception node',
+    description='f1tenth pure pursuit node',
     license='MIT',
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            'perception_node = perception_pkg.perception_node:main',
+            'pure_pursuit = pure_pursuit_pkg.pure_pursuit_node:main',
         ],
     },
 )

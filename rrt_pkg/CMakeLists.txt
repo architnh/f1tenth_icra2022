@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.5)
-project(pure_pursuit)
+project(rrt_pkg)
 
 # Default to C++14
 if(NOT CMAKE_CXX_STANDARD)
@@ -36,25 +36,17 @@ include_directories(
 )
 
 # Create Cpp executable
-add_executable(pure_pursuit_node src/pure_pursuit_node.cpp)
+add_executable(rrt_node src/rrt_node.cpp src/rrt.cpp)
 
-ament_target_dependencies(pure_pursuit_node 
+ament_target_dependencies(rrt_node 
   rclcpp geometry_msgs ackermann_msgs nav_msgs sensor_msgs std_msgs visualization_msgs tf2_ros
 )
 
 # Install Cpp executables
 install(TARGETS
-  pure_pursuit_node
+  rrt_node
   DESTINATION lib/${PROJECT_NAME})
 
-# Install Python modules
-ament_python_install_package(${PROJECT_NAME})
-
-# Install Python executables
-install(PROGRAMS
-  scripts/pure_pursuit_node.py
-  DESTINATION lib/${PROJECT_NAME}
-)
 
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
