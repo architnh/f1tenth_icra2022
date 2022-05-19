@@ -33,8 +33,8 @@ class ReactiveFollowGap : public rclcpp::Node {
         float max_drive_range_threshold = 5.0;
 
 
-        float min_drive_speed = .5; //meters per sec
-        float max_drive_speed =  1.0; // meters/sec
+        float min_drive_speed = 3.0; //meters per sec
+        float max_drive_speed =  4.0; // meters/sec
         float car_width = .60; //Meters
 
         float angle_cutoff = 1.5; //radians
@@ -43,7 +43,7 @@ class ReactiveFollowGap : public rclcpp::Node {
 
         std::string lidarscan_topic = "/scan";
         std::string drive_topic = "/drive";
-        std::string decision_topic = "/use_gap";
+        std::string decision_topic = "/use_obs_avoid";
 
         /// Create ROS subscribers and publishers
         rclcpp::Subscription<sensor_msgs::msg::LaserScan>::SharedPtr scan_sub;

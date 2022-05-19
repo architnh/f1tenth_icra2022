@@ -21,6 +21,8 @@ setup(
     entry_points={
         'console_scripts': [
             'pure_pursuit = pure_pursuit_pkg.pure_pursuit_node:main',
+            'pure_pursuit_opp = pure_pursuit_pkg.pure_pursuit_node_opp:main',
+
         ],
     },
 )

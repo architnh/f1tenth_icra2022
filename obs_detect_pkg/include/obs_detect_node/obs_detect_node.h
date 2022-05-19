@@ -68,7 +68,7 @@ private:
     //Publishers 
     std::string coll_grid_topic = "/coll_grid_pub_rviz";
     std::string coll_path_topic = "/coll_path_pub_rviz";
-    std::string use_avoid_topic = "/use_avoid";
+    std::string use_avoid_topic = "/use_obs_avoid";
     rclcpp::Publisher<nav_msgs::msg::OccupancyGrid>::SharedPtr grid_pub;
     rclcpp::Publisher<nav_msgs::msg::OccupancyGrid>::SharedPtr path_pub;
     rclcpp::Publisher<std_msgs::msg::Bool>::SharedPtr use_avoid_pub;

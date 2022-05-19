@@ -143,16 +143,18 @@ void OBS_DETECT::check_to_activate_obs_avoid(std::vector<signed char> &occugrid_
         } else{
           run_check = false;
         }
-
         std::vector<std::vector<int>> grid_interp_points;
         if (run_check == true){
-          int origin_idx = car_spline_idx;
+          int origin_idx;
           int goal_idx = car_spline_idx;
           for(int b=0; b <= iterations; b+=1){
               origin_idx = goal_idx;
               goal_idx += increment;
               if (goal_idx >= max_spline_idx){
                   goal_idx = goal_idx - max_spline_idx;
+              }
+              if (origin_idx >= max_spline_idx){
+                  origin_idx = origin_idx - max_spline_idx;
               }
               if (b == iterations){
                 goal_idx = goal_spline_idx;
@@ -246,6 +248,7 @@ void OBS_DETECT::check_to_activate_obs_avoid(std::vector<signed char> &occugrid_
                 break;
             }
         }
+
 
         publish_path(path_data);
 
@@ -400,6 +403,9 @@ int OBS_DETECT::find_obs_detect_goal_idx(float l_dist, std::vector<std::vector<f
         }
         current_idx +=1;
         next_idx +=1; 
+        if (next_idx >= spline_points.size()){
+            next_idx = 0;
+        }
     }
     goal_point_idx += car_idx; 
     if (goal_point_idx >= spline_points.size()){
