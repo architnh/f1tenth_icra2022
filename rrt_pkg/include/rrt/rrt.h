@@ -49,15 +49,15 @@ public:
 
     float update_rate = 0.0001;//0.04;//Time between updating rrt graph. Time to execute RRT* is around 0.0001 min to 0.002 sec. Recommended to keep above 0.03
 
-    const static int occu_grid_x_size=100;//135;//always make this an even number
-    const static int occu_grid_y_size=100;//125;//always make this an even
+    const static int occu_grid_x_size=46;//135;//always make this an even number
+    const static int occu_grid_y_size=46;//125;//always make this an even
 
     //DANGER BE CAREFUL CHANGING THIS NUMBER SEE NOTE BELOW
-    const float  resolution=0.04;//0.04;//
+    const float  resolution=0.14;//0.04;//
 
     //WARNING IF YOU CHANGE RESOLUTION, ALSO CHANGE THE DIVIDE BY NUMBER IN THE TWO VARIABLES BELOW
-    const static int x_size=  occu_grid_x_size/0.04;//0.04;
-    const static int y_size= occu_grid_y_size/0.04;//0.04;
+    const static int x_size=  occu_grid_x_size/0.14;//0.04;
+    const static int y_size= occu_grid_y_size/0.14;//0.04;
 
     const static int center_y = occu_grid_y_size/2;
     const static int center_x = occu_grid_x_size * 0.2; //occu_grid_x_size/2;
@@ -68,7 +68,7 @@ public:
 
     //RRT Stuff
     float max_expansion_dist = 0.5; //meters
-    int max_iter = 300;//500;
+    int max_iter = 100;//500;
     float goal_threshold = 0.1; //meters
     float l_value=3;
     nav_msgs::msg::Odometry global_goal;
