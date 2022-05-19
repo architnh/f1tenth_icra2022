@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.5)
-project(obs_detect_pkg)
+project(gap_follow)
 
 # Default to C++14
 if(NOT CMAKE_CXX_STANDARD)
@@ -11,19 +11,16 @@ if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
 endif()
 
 # Find dependencies
-foreach(PACKAGE 
-  ament_cmake 
+foreach(PACKAGE
+  ament_cmake
   ament_cmake_python
   rclcpp
-  rclpy 
+  rclpy
   geometry_msgs
   nav_msgs
   ackermann_msgs
   sensor_msgs
-  std_msgs
-  visualization_msgs
-  Eigen3
-  tf2_ros)
+  std_msgs)
 
   find_package(${PACKAGE} REQUIRED)
 
@@ -31,22 +28,36 @@ endforeach()
 
 # Include Cpp "include" directory
 include_directories(include)
-include_directories(
-  ${EIGEN3_INCLUDE_DIRS}
-)
 
 # Create Cpp executable
-add_executable(obs_detect_node src/obs_detect_node.cpp src/obs_detect.cpp)
-
-ament_target_dependencies(obs_detect_node 
-  rclcpp geometry_msgs ackermann_msgs nav_msgs sensor_msgs std_msgs visualization_msgs tf2_ros
+add_executable(reactive_node src/reactive_node.cpp)
+ament_target_dependencies(reactive_node
+  rclcpp geometry_msgs ackermann_msgs nav_msgs sensor_msgs std_msgs
+)
+add_executable(reactive_node_opp src/reactive_node_opp.cpp)
+ament_target_dependencies(reactive_node_opp
+  rclcpp geometry_msgs ackermann_msgs nav_msgs sensor_msgs std_msgs
+)
+add_executable(null_node src/null_node.cpp)
+ament_target_dependencies(null_node
+  rclcpp geometry_msgs ackermann_msgs nav_msgs sensor_msgs std_msgs
 )
 
 # Install Cpp executables
 install(TARGETS
-  obs_detect_node
+  reactive_node
+  reactive_node_opp
+  null_node
   DESTINATION lib/${PROJECT_NAME})
 
+# Install Python modules
+ament_python_install_package(${PROJECT_NAME})
+
+# Install Python executables
+install(PROGRAMS
+  scripts/reactive_node.py
+  DESTINATION lib/${PROJECT_NAME}
+)
 
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)

@@ -1,6 +1,6 @@
 from setuptools import setup
 
-package_name = 'pure_pursuit_pkg'
+package_name = 'gap_follow'
 
 setup(
     name=package_name,
@@ -13,16 +13,14 @@ setup(
     ],
     install_requires=['setuptools'],
     zip_safe=True,
-    maintainer='Archit Hardikar',
-    maintainer_email='architnh@seas.upenn.edu',
-    description='f1tenth pure pursuit node',
+    maintainer='zzangupenn, Hongrui Zheng',
+    maintainer_email='zzang@seas.upenn.edu, billyzheng.bz@gmail.com',
+    description='f1tenth gap_follow lab',
     license='MIT',
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            'pure_pursuit = pure_pursuit_pkg.pure_pursuit_node:main',
-            'pure_pursuit_opp = pure_pursuit_pkg.pure_pursuit_node_opp:main',
-
+            'reactive_node = gap_follow.reactive_node:main',
         ],
     },
 )

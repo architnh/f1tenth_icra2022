@@ -17,17 +17,16 @@ from visualization_msgs.msg import Marker
 from visualization_msgs.msg import MarkerArray
 
 
-class PurePursuit(Node):
+class PurePursuitOpp(Node):
     """
-    Implement Pure Pursuit on the car
+    Implement Pure Pursuit on simulation
     """
     def __init__(self):
-        super().__init__('pure_pursuit_node')
+        super().__init__('pure_pursuit_node_opp')
 
         # User inputs
         traj_csv = "good_real_points.csv" #Name of csv in racelines directory
-        self.sim_flag = True  # Set flag true for simulation, false for real
-        self.speed_override = 3.0 #Set to None for there to be no speed override
+        self.speed_override = 2.0 #Set to None for there to be no speed override
 
         # Define paths
         pkg_dir = os.path.join(os.getcwd(), 'src', 'pure_pursuit_pkg', 'pure_pursuit_pkg')
@@ -53,34 +52,11 @@ class PurePursuit(Node):
         spline_data, m = interpolate.splprep([self.pp_waypoints[:, 0], self.pp_waypoints[:, 1]], s=0, per=True)
         self.pp_x_spline, self.pp_y_spline = interpolate.splev(np.linspace(0, 1, 1000), spline_data)
         self.pp_spline_points = np.vstack((self.pp_x_spline, self.pp_y_spline, np.zeros((len(self.pp_y_spline)))))
-        with open(os.path.join(pkg_dir, 'racelines', 'temp', 'spline.csv'), 'w', newline='') as csvfile:
-                writer = csv.writer(csvfile, delimiter=',')
-                for i in range(len(self.pp_x_spline)):
-                        writer.writerow([self.pp_x_spline[i], self.pp_y_spline[i]])
         self.drive_velocity = np.roll(self.calculate_velocity_profile(self.pp_x_spline, self.pp_y_spline), - self.offset)
 
-        #### Obstacle Avoidance ###
-        self.use_obs_avoid = False
-        self.obs_avoid_L = 3.0
-
         ### ROS PUB/SUB ###
-        if self.sim_flag:
-            self.pose_subscriber = self.create_subscription(Odometry, 'ego_racecar/odom', self.pose_callback, 1)
-        else:
-            self.pose_subscriber = self.create_subscription(Odometry, 'pf/pose/odom', self.pose_callback, 1)
-
-        self.current_goal_publisher = self.create_publisher(PointStamped, 'pp_current_goal_rviz',1)
-        self.spline_publisher = self.create_publisher(Marker, 'pp_spline_rviz',1)
-        self.drive_publisher = self.create_publisher(AckermannDriveStamped, 'drive', 1)
-        self.global_goal_publisher = self.create_publisher(Odometry, 'global_goal_pure_pursuit', 1)
-        self.global_goal_obs_avoid_publisher = self.create_publisher(Odometry, 'global_goal_obs_avoid', 1)
-        self.use_obs_avoid_subscriber = self.create_subscription(Bool, 'use_obs_avoid', self.use_obs_avoid_callback, 1)
-
-        #For rviz
-        self.spline_data = self.populate_spline_data()
-        self.timer = self.create_timer(2, self.create_spline)#Publish Spline
-        self.local_goal = Odometry()
-        self.color_data = self.populate_color_spline_points()
+        self.pose_subscriber = self.create_subscription(Odometry, 'opp_racecar/odom', self.pose_callback, 1)
+        self.drive_publisher = self.create_publisher(AckermannDriveStamped, 'opp_drive', 1)
 
 
     def pose_callback(self, pose_msg):
@@ -98,40 +74,19 @@ class PurePursuit(Node):
         # Calculate goal point
         global_goal_point = self.find_goal_point(self.pp_steer_L)
         local_goal_point = self.global_2_local(current_quat, current_position, global_goal_point)
-        self.publish_current_goal_point(global_goal_point)  # Create RVIZ Purple Dot
 
-        # Decide if using pure pursuit
-        if not self.use_obs_avoid:
-            steering_angle = self.calc_steer(local_goal_point, self.kp)
-            drive_speed = self.drive_velocity[self.spline_index_car]
-            if drive_speed < self.v_min: # Dont drive too slow
-                drive_speed = self.v_min
-            msg = AckermannDriveStamped()
-            if self.speed_override is None:
-                msg.drive.speed = float(drive_speed)###CHANGE THIS BACK, IN SIM THE CHANGING VELOCITY WAS CAUSING PROBLEMS
-            else:
-                msg.drive.speed = self.speed_override
-            msg.drive.steering_angle = float(steering_angle)
-            self.drive_publisher.publish(msg)
-        
-        # Global Goal for RRT
-        global_goal = Odometry()
-        global_goal.header.frame_id = "map"
-        global_goal.header.stamp = self.get_clock().now().to_msg()
-        global_goal.pose.pose.position.x = float(global_goal_point[0])
-        global_goal.pose.pose.position.y = float(global_goal_point[1])
-        global_goal.pose.pose.position.z = float(global_goal_point[2])
-        self.global_goal_publisher.publish(global_goal)
+        steering_angle = self.calc_steer(local_goal_point, self.kp)
+        drive_speed = self.drive_velocity[self.spline_index_car]
+        if drive_speed < self.v_min: # Dont drive too slow
+            drive_speed = self.v_min
+        msg = AckermannDriveStamped()
+        if self.speed_override is None:
+            msg.drive.speed = float(drive_speed)###CHANGE THIS BACK, IN SIM THE CHANGING VELOCITY WAS CAUSING PROBLEMS
+        else:
+            msg.drive.speed = self.speed_override
+        msg.drive.steering_angle = float(steering_angle)
+        self.drive_publisher.publish(msg)
 
-        # Global Goal for Obstacle Avoidance
-        global_goal_point_obs_avoid = self.find_goal_point(self.obs_avoid_L)
-        global_goal = Odometry()
-        global_goal.header.frame_id = "map"
-        global_goal.header.stamp = self.get_clock().now().to_msg()
-        global_goal.pose.pose.position.x = float(global_goal_point_obs_avoid[0])
-        global_goal.pose.pose.position.y = float(global_goal_point_obs_avoid[1])
-        global_goal.pose.pose.position.z = float(global_goal_point_obs_avoid[2])
-        self.global_goal_obs_avoid_publisher.publish(global_goal)
 
     def calc_steer(self, goal_point_car, kp):
         """
@@ -192,9 +147,6 @@ class PurePursuit(Node):
 
         return final_velocity_profile
 
-    def use_obs_avoid_callback(self, avoid_msg):
-        self.use_obs_avoid = avoid_msg.data
-
     def global_2_local(self, current_quat, current_position, goal_point_global):
         # Construct transformation matrix from rotation matrix and position
         H_global2car = np.zeros([4, 4]) #rigid body transformation from  the global frame of referce to the car
@@ -208,87 +160,6 @@ class PurePursuit(Node):
         goal_point_car = np.linalg.inv(H_global2car) @ goal_point_global
 
         return goal_point_car
-
-    def populate_color_spline_points(self):
-        array_values=MarkerArray()
-        for i in range(len(self.drive_velocity)):
-            message = Marker()
-            message.header.frame_id="map"
-            message.header.stamp = self.get_clock().now().to_msg()
-            message.type= Marker.SPHERE
-            message.action = Marker.ADD
-            message.id=i
-            message.pose.orientation.x=0.0
-            message.pose.orientation.y=0.0
-            message.pose.orientation.z=0.0
-            message.pose.orientation.w=1.0
-            message.scale.x=0.15
-            message.scale.y=0.15
-            message.scale.z=0.15
-            message.color.a=1.0
-
-            message.color.r= 2 *(1- float(self.drive_velocity[i] / max(self.drive_velocity)))
-            message.color.b= 0.0 
-            message.color.g= 2* float(self.drive_velocity[i] / max(self.drive_velocity))
-
-            message.pose.position.x=float(self.pp_x_spline[i])
-            message.pose.position.y=float(self.pp_y_spline[i])
-            message.pose.position.z=0.0
-            array_values.markers.append(message)
-        return array_values
-
-    def populate_spline_data(self):
-        message = Marker()
-        message.header.frame_id="map"
-        message.type= Marker.LINE_STRIP
-        message.action = Marker.ADD
-        message.scale.x= 0.150
-        message.pose.position.x= 0.0
-        message.pose.position.y= 0.0
-        message.pose.position.z=0.0
-        message.color.a=1.0
-        message.color.r=1.0
-        message.color.b=1.0
-        message.color.g=1.0
-        message.pose.orientation.x=0.0
-        message.pose.orientation.y=0.0
-        message.pose.orientation.z=0.0
-        message.pose.orientation.w=1.0
-
-        for i in range(len(self.pp_x_spline) - 1):
-            message.header.stamp = self.get_clock().now().to_msg()
-            message.id=i
-            point1=Point()
-            point1.x=float(self.pp_x_spline[i])
-            point1.y=float(self.pp_y_spline[i])
-            point1.z=0.0
-
-            message.points.append(point1)
-            point2=Point()
-            point2.x=float(self.pp_x_spline[i + 1])
-            point2.y=float(self.pp_y_spline[i + 1])
-            point2.z=0.0
-
-            message.points.append(point2)
-            self.spline_publisher.publish(message)
-
-        message.id=len(self.pp_x_spline)
-        message.header.stamp = self.get_clock().now().to_msg()
-        point1=Point()
-        point1.x=float(self.pp_x_spline[-1])
-        point1.y=float(self.pp_y_spline[-1])
-        point1.z=0.0
-
-        message.points.append(point1)
-
-        point2=Point()
-        point2.x=float(self.pp_x_spline[0])
-        point2.y=float(self.pp_y_spline[0])
-        point2.z=0.0
-
-        message.points.append(point2)
-
-        return message
 
     def get_point_distances(self, points1, points2):
         return np.linalg.norm(points1-points2)
@@ -327,18 +198,6 @@ class PurePursuit(Node):
             distance = self.get_point_distances(current_pos, points[:,current_point])
         return distance
 
-    def publish_current_goal_point(self, goal_point_position):
-        message=PointStamped()
-        message.header.stamp = self.get_clock().now().to_msg()
-        message.header.frame_id="map"
-        message.point.x=float(goal_point_position[0])
-        message.point.y=float(goal_point_position[1])
-        message.point.z=0.0
-        self.current_goal_publisher.publish(message)
-
-    def create_spline(self):
-        self.spline_publisher.publish(self.spline_data)
-    
     def find_goal_point(self, L):
         # Returns the global x,y,z position of the goal point
         points_in_front = np.roll(self.pp_spline_points, - self.spline_index_car, axis=1)
@@ -405,11 +264,11 @@ def load_from_csv(traj_csv, clicked=False, scaler=10):
 
 def main(args=None):
     rclpy.init(args=args)
-    print("PurePursuit Initialized")
-    pure_pursuit_node = PurePursuit()
-    rclpy.spin(pure_pursuit_node)
+    print("PurePursuitOpp Initialized")
+    pure_pursuit_node_opp = PurePursuitOpp()
+    rclpy.spin(pure_pursuit_node_opp)
 
-    pure_pursuit_node.destroy_node()
+    pure_pursuit_node_opp.destroy_node()
     rclpy.shutdown()
 
 
