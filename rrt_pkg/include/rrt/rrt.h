@@ -68,7 +68,7 @@ public:
 
     //RRT Stuff
     float max_expansion_dist = 0.5; //meters
-    int max_iter = 100;//500;
+    int number_of_nodes = 100;//500;
     float goal_threshold = 0.1; //meters
     float l_value=3;
     nav_msgs::msg::Odometry global_goal;
