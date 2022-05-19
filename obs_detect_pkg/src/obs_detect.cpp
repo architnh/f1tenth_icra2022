@@ -10,7 +10,7 @@
 //#include "std_msgs/msg/float32multiarray.hpp"
 //#include "std_msgs/msg/MultiArrayDimension.hpp"
 #include "geometry_msgs/msg/pose_array.hpp"
-
+#include "ackermann_msgs/msg/ackermann_drive_stamped.hpp"
 
 // Destructor of the OBS_DETECT classFalse
 OBS_DETECT::~OBS_DETECT() {
@@ -29,6 +29,7 @@ OBS_DETECT::OBS_DETECT(): rclcpp::Node("obs_detect_node"){
 
     // ROS subscribers
     scan_sub_ = this->create_subscription<sensor_msgs::msg::LaserScan>(scan_topic, 1, std::bind(&OBS_DETECT::scan_callback, this, std::placeholders::_1));
+    drive_sub_ = this->create_subscription<ackermann_msgs::msg::AckermannDriveStamped>(drive_topic, 1, std::bind(&OBS_DETECT::drive_callback, this, std::placeholders::_1));
     if(sim == true){
         pose_sub_ = this->create_subscription<nav_msgs::msg::Odometry>(pose_topic_sim, 1, std::bind(&OBS_DETECT::pose_callback, this, std::placeholders::_1));
     }
@@ -62,6 +63,8 @@ OBS_DETECT::OBS_DETECT(): rclcpp::Node("obs_detect_node"){
     q.z()= 0;
     q.w()= 1;
     rotation_mat = q.normalized().toRotationMatrix();
+    current_car_speed = 0.0;
+    collision_l = 3.0;
 }
 
 /// MAIN CALLBACK FUNCTIONS///
@@ -126,14 +129,8 @@ void OBS_DETECT::check_to_activate_obs_avoid(std::vector<signed char> &occugrid_
         */
 
         int car_spline_idx = find_spline_index(current_car_pose.pose.pose.position.x, current_car_pose.pose.pose.position.y);
-        int goal_spline_idx = find_obs_detect_goal_idx(3.0, spline_points, car_spline_idx);
+        int goal_spline_idx = find_obs_detect_goal_idx(collision_l, spline_points, car_spline_idx);
         std::vector<float> global_goal = spline_points[goal_spline_idx];
-        std::cout<<"Goal idx"<<goal_spline_idx<<std::endl;
-        
-
-
-
-        //Get spline index of car and goal point
         int max_spline_idx = spline_points.size();
 
         int increment = 10;
@@ -165,11 +162,13 @@ void OBS_DETECT::check_to_activate_obs_avoid(std::vector<signed char> &occugrid_
               float x_origin = spline_points[origin_idx][0] - current_car_pose.pose.pose.position.x;
               float y_origin = spline_points[origin_idx][1]- current_car_pose.pose.pose.position.y;
 
+
               Eigen::Vector3d shift_coords_origin(x_origin, y_origin, 0);
               Eigen::Vector3d local_origin = rotation_mat.inverse() * shift_coords_origin;
 
               Eigen::Vector3d shift_coords_goal(x_goal, y_goal, 0);
               Eigen::Vector3d local_goal = rotation_mat.inverse() * shift_coords_goal;
+
 
               //Convert to occu coordinates
               //If on first iteration, connect car to spline
@@ -186,14 +185,16 @@ void OBS_DETECT::check_to_activate_obs_avoid(std::vector<signed char> &occugrid_
                   origin_point[0] =(local_origin[0]/resolution)+center_x;
                   origin_point[1] =(local_origin[1]/resolution)+center_y;
               }
+
                 std::vector<std::vector<int>> temp_grid_interp_points;
                 temp_grid_interp_points = bresenhams_line_algorithm(goal_point,origin_point);
 
+
+                
                 //Make Interp Points Wider
                 //Add 9 cm to each side
                 int add_val_x = abs((0.025 / resolution)); //0.1
                 int add_val_y = abs((0.025 / resolution)); //0.1
-                //std::cout<<"3"<<std::endl;
                 if(add_val_x==0){
                     add_val_x=1;
                 }
@@ -220,6 +221,7 @@ void OBS_DETECT::check_to_activate_obs_avoid(std::vector<signed char> &occugrid_
                         }
                     }
                 }
+                
 
             grid_interp_points.insert(grid_interp_points.end(), temp_grid_interp_points.begin(), temp_grid_interp_points.end());
           }
@@ -261,17 +263,23 @@ void OBS_DETECT::check_to_activate_obs_avoid(std::vector<signed char> &occugrid_
 void OBS_DETECT::pose_callback(const nav_msgs::msg::Odometry::ConstSharedPtr pose_msg) {
     // The pose callback when subscribed to particle filter's inferred pose
     // Check to see if we need gap follow
-    // Args:
-    //    pose_msg (*PoseStamped): pointer to the incoming pose message
-    // Returns:
-    //    If we need to use the gap follow node
-
+    // Args:msg
+    
     current_car_pose = *pose_msg;
     q.x()= current_car_pose.pose.pose.orientation.x;
     q.y()= current_car_pose.pose.pose.orientation.y;
     q.z()= current_car_pose.pose.pose.orientation.z;
     q.w()= current_car_pose.pose.pose.orientation.w;
     rotation_mat = q.normalized().toRotationMatrix();
+
+}
+
+void OBS_DETECT::drive_callback(const ackermann_msgs::msg::AckermannDriveStamped::ConstSharedPtr drive_msg) {
+    // The drive callback gets the published drive message
+
+    ackermann_msgs::msg::AckermannDriveStamped msg = *drive_msg;
+    current_car_speed = msg.drive.speed; 
+    collision_l = current_car_speed * collision_time_buffer;
 }
 
 /// FUNCTIONS FOR DETECTING OBS_DETECT ON/OFF ///
@@ -285,7 +293,10 @@ std::vector<std::vector<int>> OBS_DETECT::bresenhams_line_algorithm(int goal_poi
         int y_diff = y2 - y1;
         int x_diff = x2 - x1;
 
+        bool swapped = false;
+
         if (abs(y_diff) >= abs(x_diff)){
+            swapped = true;
             x1 = origin_point[1];
             y1 = origin_point[0];
             x2 = goal_point[1];
@@ -327,7 +338,9 @@ std::vector<std::vector<int>> OBS_DETECT::bresenhams_line_algorithm(int goal_poi
                 error+=x_diff;
             }
         }
-        if(abs(goal_point[0] - output.back()[0]) > 1 && abs(origin_point[0] - output.back()[0]) > 1){
+        
+
+        if(swapped == true){
             std::vector<std::vector<int>> newoutput;
             for(int i=0;i<output.size();i++){
                 std::vector<int> newcoords{output[i][1],output[i][0]};
@@ -335,9 +348,12 @@ std::vector<std::vector<int>> OBS_DETECT::bresenhams_line_algorithm(int goal_poi
             }
             return newoutput;
         }
+        
         else{
             return output;
-        }    
+        }  
+        
+       return output;  
     }
     catch(...){
         std::cout<<"bresenhams failed"<<std::endl;

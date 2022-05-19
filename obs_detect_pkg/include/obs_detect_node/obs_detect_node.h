@@ -36,8 +36,8 @@ public:
 
     //Define Occupancy Grid Parameters
     float update_rate = 0.0001;//0.04;//Time between updating rrt graph. Time to execute RRT* is around 0.0001 min to 0.002 sec. Recommended to keep above 0.03
-    const static int occu_grid_x_size=100;//135;//always make this an even number
-    const static int occu_grid_y_size=100;//125;//always make this an even
+    const static int occu_grid_x_size=150;//135;//always make this an even number
+    const static int occu_grid_y_size=70;//125;//always make this an even
     const float  resolution=0.04;
     const static int x_size=  occu_grid_x_size/0.04;  //WARNING IF YOU CHANGE RESOLUTION, ALSO CHANGE THE DIVIDE BY NUMBER IN THE TWO VARIABLES BELOW
     const static int y_size= occu_grid_y_size/0.04;  //WARNING IF YOU CHANGE RESOLUTION, ALSO CHANGE THE DIVIDE BY NUMBER IN THE TWO VARIABLES BELOW
@@ -49,17 +49,23 @@ public:
     Eigen::Quaterniond q;
     Eigen::Matrix3d rotation_mat;
     nav_msgs::msg::Odometry current_car_pose;
-    std::vector<std::vector<float>> spline_points;    
+    std::vector<std::vector<float>> spline_points;   
+
+    //Drive command information 
+    float current_car_speed; 
 
     //OBS_DETECT Stuff
     rclcpp::Time previous_time = rclcpp::Clock().now();
     bool use_coll_avoid=false;
+    float collision_l;
+    float collision_time_buffer = 0.5; //s
+
 
 private:
     //Spline points location
     std::string spline_file_name = "src/pure_pursuit_pkg/pure_pursuit_pkg/racelines/temp/spline.csv";
 
-    //Publishers and Subscribers  
+    //Publishers 
     std::string coll_grid_topic = "/coll_grid_pub_rviz";
     std::string coll_path_topic = "/coll_path_pub_rviz";
     std::string use_avoid_topic = "/use_avoid";
@@ -67,15 +73,20 @@ private:
     rclcpp::Publisher<nav_msgs::msg::OccupancyGrid>::SharedPtr path_pub;
     rclcpp::Publisher<std_msgs::msg::Bool>::SharedPtr use_avoid_pub;
 
+    //Subscribers
     std::string scan_topic = "/scan";
     std::string pose_topic_sim = "ego_racecar/odom";
     std::string pose_topic_real = "pf/pose/odom";
+    std::string drive_topic = "/drive";
     rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr pose_sub_;
     rclcpp::Subscription<sensor_msgs::msg::LaserScan>::SharedPtr scan_sub_;
+    rclcpp::Subscription<ackermann_msgs::msg::AckermannDriveStamped>::SharedPtr drive_sub_;
 
+    
     // callbacks
     void pose_callback(const nav_msgs::msg::Odometry::ConstSharedPtr pose_msg);
     void scan_callback(const sensor_msgs::msg::LaserScan::ConstSharedPtr scan_msg);
+    void drive_callback(const ackermann_msgs::msg::AckermannDriveStamped::ConstSharedPtr drive_msg);
 
     //functions
     void check_to_activate_obs_avoid(std::vector<signed char> &obstacle_data);
