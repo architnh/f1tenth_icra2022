@@ -344,7 +344,7 @@ std::vector<RRT_Node> RRT::perform_rrt(){
             //std::cout<<"Local goal x: "<<x_goal <<", Local goal y: "<< y_goal <<std::endl;
             std::vector<RRT_Node> final_path;
 
-            for (int i = 0; i < max_iter; i++){
+            for (int i = 0; i < number_of_nodes; i++){
             struct RRT_Node node_new; //New node
             node_rand = sample(); //Create sampled node "node_rand"
             node_nearest = nearest(tree, node_rand); //closest neigbor in tree
@@ -674,7 +674,6 @@ std::vector<int> RRT::near(std::vector<RRT_Node> &tree, RRT_Node &node) {
     //   neighborhood (std::vector<int>): the index of the nodes in the neighborhood
 
     std::vector<int> neighborhood;
-    float search_radius = 1.5;//1.5; // can be tweaked
     // TODO:: fill in this method
     for(int i=0; i<tree.size(); i++){
         const double distance = sqrt(abs(pow(node.x - tree[i].x, 2)) + abs(pow(node.y - tree[i].y, 2))); //L2 norm as cost

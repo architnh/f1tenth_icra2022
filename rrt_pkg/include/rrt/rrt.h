@@ -71,6 +71,7 @@ public:
     int number_of_nodes = 100;//500;
     float goal_threshold = 0.1; //meters
     float l_value=3;
+    float search_radius = 1.5; //for RRT*
     nav_msgs::msg::Odometry global_goal;
 
     rclcpp::Time previous_time = rclcpp::Clock().now();
