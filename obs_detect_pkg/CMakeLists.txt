@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.5)
-project(rrt_pkg)
+project(obs_detect_pkg)
 
 # Default to C++14
 if(NOT CMAKE_CXX_STANDARD)
@@ -36,15 +36,15 @@ include_directories(
 )
 
 # Create Cpp executable
-add_executable(rrt_node src/rrt_node.cpp src/rrt.cpp)
+add_executable(obs_detect_node src/obs_detect_node.cpp src/obs_detect.cpp)
 
-ament_target_dependencies(rrt_node 
+ament_target_dependencies(obs_detect_node 
   rclcpp geometry_msgs ackermann_msgs nav_msgs sensor_msgs std_msgs visualization_msgs tf2_ros
 )
 
 # Install Cpp executables
 install(TARGETS
-  rrt_node
+  obs_detect_node
   DESTINATION lib/${PROJECT_NAME})
 
 

@@ -26,7 +26,8 @@ class PurePursuit(Node):
 
         # User inputs
         traj_csv = "good_real_points.csv" #Name of csv in racelines directory
-        self.sim_flag = False  # Set flag true for simulation, false for real
+        self.sim_flag = True  # Set flag true for simulation, false for real
+        self.speed_override = 0 #Set to None for there to be no speed override
 
         # Define paths
         pkg_dir = os.path.join(os.getcwd(), 'src', 'pure_pursuit_pkg', 'pure_pursuit_pkg')
@@ -60,7 +61,7 @@ class PurePursuit(Node):
 
         #### Obstacle Avoidance ###
         self.use_obs_avoid = False
-        self.abs_avoid_L = 3.0
+        self.obs_avoid_L = 3.0
 
         ### ROS PUB/SUB ###
         if self.sim_flag:
@@ -106,7 +107,10 @@ class PurePursuit(Node):
             if drive_speed < self.v_min: # Dont drive too slow
                 drive_speed = self.v_min
             msg = AckermannDriveStamped()
-            msg.drive.speed = 1.0  # float(drive_speed)###CHANGE THIS BACK, IN SIM THE CHANGING VELOCITY WAS CAUSING PROBLEMS
+            if self.speed_override is not None:
+                msg.drive.speed = float(drive_speed)###CHANGE THIS BACK, IN SIM THE CHANGING VELOCITY WAS CAUSING PROBLEMS
+            else:
+                msg.drive.speed = self.speed_override
             msg.drive.steering_angle = float(steering_angle)
             self.drive_publisher.publish(msg)
 
@@ -127,7 +131,7 @@ class PurePursuit(Node):
         global_goal.pose.pose.position.x = float(global_goal_point_obs_avoid[0])
         global_goal.pose.pose.position.y = float(global_goal_point_obs_avoid[1])
         global_goal.pose.pose.position.z = float(global_goal_point_obs_avoid[2])
-        self.global_goal_obs_avoid_publisher_publisher.publish(global_goal)
+        self.global_goal_obs_avoid_publisher.publish(global_goal)
 
     def calc_steer(self, goal_point_car, kp):
         """
