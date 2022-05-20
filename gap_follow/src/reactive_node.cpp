@@ -281,18 +281,21 @@ class ReactiveFollowGap : public rclcpp::Node {
 
 
             //Cases to fix out of bounds errors
+            //Cases to fix out of bounds errors
+            int n_up = n;
+            int n_down = n;
             if (bubble_idx + n > num_points){
-                n = num_points - bubble_idx;
+                n_up = num_points - bubble_idx;
             }
             if (bubble_idx - n < 0.0 ){
-                n = bubble_idx;
+                n_down = bubble_idx;
             }
 
             //Set points within bubble to zero
-            for (int j = 0; j < n + 1; j++){
+            for (int j = 0; j < n_up + 1; j++){
                 ranges[bubble_idx + j] = 0.0;
             }
-            for (int j = 0; j < n + 1; j++){
+            for (int j = 0; j < n_down + 1; j++){
                 ranges[bubble_idx - j] = 0.0;
             }
         }
@@ -316,8 +319,6 @@ class ReactiveFollowGap : public rclcpp::Node {
                     cur_angle = (scan_msg->angle_increment * i) + (scan_msg->angle_min);
                     angles_raw.push_back(cur_angle);
                 }
-
-
 
                 //Find the start and end of the angle cutoff
                 //Reduces the number of ranges looked at

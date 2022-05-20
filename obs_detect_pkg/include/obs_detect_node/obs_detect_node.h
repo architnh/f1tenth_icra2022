@@ -23,7 +23,7 @@
 #include <tf2_ros/transform_broadcaster.h>
 #include "std_msgs/msg/float32.hpp"
 #include "std_msgs/msg/bool.hpp"
-//#include "std_msgs/msg/float32multiarray.hpp"
+#include "std_msgs/msg/float32_multi_array.hpp"
 #include "geometry_msgs/msg/pose_array.hpp"
 /// CHECK: include needed ROS msg type headers and libraries
 
@@ -33,6 +33,9 @@ class OBS_DETECT : public rclcpp::Node {
 public:
     OBS_DETECT();
     virtual ~OBS_DETECT();
+
+    //User input
+    bool publish_thetas = true;
 
     //Define Occupancy Grid Parameters
     int occu_grid_x_size_min = 50;
@@ -66,6 +69,13 @@ public:
     int goal_spline_idx = 100;
     bool got_pose_flag = false;
 
+    //Gap stuff
+    float max_range_threshold = 10.0;
+    float bubble_dist_threshold = 6; //meteres
+    float disp_threshold = .4;//meter
+    float car_width = .60; //Meter
+    float angle_cutoff = 1.5; //radians
+
 
 
 private:
@@ -76,9 +86,11 @@ private:
     std::string coll_grid_topic = "/coll_grid_pub_rviz";
     std::string coll_path_topic = "/coll_path_pub_rviz";
     std::string use_avoid_topic = "/use_obs_avoid";
+    std::string gap_theta_topic = "/gap_thetas";
     rclcpp::Publisher<nav_msgs::msg::OccupancyGrid>::SharedPtr grid_pub;
     rclcpp::Publisher<nav_msgs::msg::OccupancyGrid>::SharedPtr path_pub;
     rclcpp::Publisher<std_msgs::msg::Bool>::SharedPtr use_avoid_pub;
+    rclcpp::Publisher<std_msgs::msg::Float32MultiArray>::SharedPtr gap_theta_pub;
 
     //Subscribers
     std::string scan_topic = "/scan";
@@ -104,6 +116,15 @@ private:
     //Publisher functions
     void publish_grid(std::vector<signed char> &occugrid_flat);
     void publish_path(std::vector<signed char> &occugrid_flat); 
+
+    //Gap identifier functions
+    void preprocess_lidar(std::vector<float>& ranges, int num_readings);
+    int* find_max_gap(std::vector<float>& ranges, int num_readings);
+    int find_disparities(std::vector<int>& disp_idx, std::vector<float>& ranges, int num_readings);
+    void set_disparity(std::vector<float>& ranges, int num_points, std::vector<int>& disp_idx, int num_disp, float angle_increment, std::vector<float>& ranges_clean);
+    void set_close_bubble(std::vector<float>& ranges, std::vector<float>& angles, int num_points, float angle_increment);
+
+
 };
 
 
