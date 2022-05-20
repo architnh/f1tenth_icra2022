@@ -42,7 +42,7 @@ public:
     const static int x_size=  occu_grid_x_size/0.04;  //WARNING IF YOU CHANGE RESOLUTION, ALSO CHANGE THE DIVIDE BY NUMBER IN THE TWO VARIABLES BELOW
     const static int y_size= occu_grid_y_size/0.04;  //WARNING IF YOU CHANGE RESOLUTION, ALSO CHANGE THE DIVIDE BY NUMBER IN THE TWO VARIABLES BELOW
     const static int center_y = occu_grid_y_size/2;
-    const static int center_x = occu_grid_x_size * 0.05; //occu_grid_x_size/2;
+    const static int center_x = 7;// occu_grid_x_size * 0.05; //occu_grid_x_size/2;
     int occu_grid[x_size][y_size]= {0};
 
     //Pose information
