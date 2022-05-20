@@ -13,8 +13,13 @@ def generate_launch_description():
     ld = LaunchDescription()
     bringup = IncludeLaunchDescription(
       PythonLaunchDescriptionSource([os.path.join(
-         get_package_share_directory('f1tenth_gym_ros'), 'launch'),
-         '/gym_bridge_launch.py'])
+         get_package_share_directory('f1tenth_stack'), 'launch'),
+         '/bringup_launch.py'])
+      )
+    pf = IncludeLaunchDescription(
+      PythonLaunchDescriptionSource([os.path.join(
+         get_package_share_directory('particle_filter'), 'launch'),
+         '/localize_launch.py'])
       )
     # # Simulator Launch
     # config = os.path.join(
@@ -101,6 +106,7 @@ def generate_launch_description():
     # if has_opp:
     #     ld.add_action(opp_robot_publisher)
     ld.add_action(bringup)
+    ld.add_action(pf)
     ld.add_action(pure_pursuit_node)
     ld.add_action(obs_detect_node)
     ld.add_action(gap_follow_node)
