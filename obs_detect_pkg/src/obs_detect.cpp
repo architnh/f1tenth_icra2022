@@ -7,7 +7,7 @@
 #include <math.h>
 #include "visualization_msgs/msg/marker.hpp"
 #include "visualization_msgs/msg/marker_array.hpp"
-//#include "std_msgs/msg/float32multiarray.hpp"
+#include "std_msgs/msg/float32_multi_array.hpp"
 //#include "std_msgs/msg/MultiArrayDimension.hpp"
 #include "geometry_msgs/msg/pose_array.hpp"
 #include "ackermann_msgs/msg/ackermann_drive_stamped.hpp"
@@ -26,6 +26,7 @@ OBS_DETECT::OBS_DETECT(): rclcpp::Node("obs_detect_node"){
     grid_pub = this->create_publisher<nav_msgs::msg::OccupancyGrid>(coll_grid_topic,1);
     path_pub = this->create_publisher<nav_msgs::msg::OccupancyGrid>(coll_path_topic,1);
     use_avoid_pub = this->create_publisher<std_msgs::msg::Bool>(use_avoid_topic,1);
+    gap_theta_pub = this->create_publisher<std_msgs::msg::Float32MultiArray>(gap_theta_topic, 1);
 
     // ROS subscribers
     scan_sub_ = this->create_subscription<sensor_msgs::msg::LaserScan>(scan_topic, 1, std::bind(&OBS_DETECT::scan_callback, this, std::placeholders::_1));
@@ -77,8 +78,53 @@ void OBS_DETECT::scan_callback(const sensor_msgs::msg::LaserScan::ConstSharedPtr
     //    listed_data: A new occupancy grid
     //    checks if we need to use gap follow
 
+
+    if(publish_thetas == true){
+        std::vector<float> angles_raw;
+        float cur_angle;
+        int num_readings = scan_msg->ranges.size();
+        for(int i = 0; i < scan_msg->ranges.size(); i++){
+            cur_angle = (scan_msg->angle_increment * i) + (scan_msg->angle_min);
+            angles_raw.push_back(cur_angle);
+        }
+        //Find the start and end of the angle cutoff
+        //Reduces the number of ranges looked at
+        int cutoff_start_idx;
+        int cutoff_end_idx;
+        for(int i = 0; i < num_readings; i++){
+            if (angles_raw[i] > (angle_cutoff * -1.0)){
+                cutoff_start_idx = i;
+                break;
+            }
+        }
+        for(int i = 0; i < num_readings; i++){
+            if (angles_raw[i] > (angle_cutoff)){
+                cutoff_end_idx = i;
+                break;
+            }
+        }
+        int num_readings_p = cutoff_end_idx - cutoff_start_idx;
+        //Create new "processed" angle and ranges vectors as a subset of the raw ranges and angles
+        std::vector<float> ranges_p(&scan_msg->ranges[cutoff_start_idx], &scan_msg->ranges[cutoff_end_idx]);
+        std::vector<float> angles_p(&angles_raw[cutoff_start_idx], &angles_raw[cutoff_end_idx]);
+        preprocess_lidar(ranges_p, num_readings_p); //updates ranges_p
+        int num_disp;
+        std::vector<int> disp_idx;
+        num_disp = find_disparities(disp_idx, ranges_p, num_readings_p);
+        //RCLCPP_INFO(this->get_logger(), "Number of disparities: %d", num_disp);
+        std::vector<float> ranges_p_clean = ranges_p;
+        set_disparity(ranges_p, num_readings_p, disp_idx, num_disp, scan_msg->angle_increment, ranges_p_clean); 
+        set_close_bubble(ranges_p, angles_p, num_readings_p, scan_msg->angle_increment);
+        int *gap_idxes = find_max_gap(ranges_p, num_readings_p); //find the drive idx from the max gap
+        //RCLCPP_INFO(this->get_logger(), "Gap start: %d, Gap end %d", gap_idxes[0], gap_idxes[1]);
+        auto gap_theta_msg = std_msgs::msg::Float32MultiArray();
+        std::vector<float> gap_data = {angles_p[gap_idxes[0]], angles_p[gap_idxes[1]]};
+        gap_theta_msg.data = gap_data;
+        gap_theta_pub->publish(gap_theta_msg);
+    }
+
+
     //Find the position of the local goal
-    
     global_obs_detect_goal = spline_points[goal_spline_idx];
     Eigen::Vector3d local_point((global_obs_detect_goal[0] - current_car_pose.pose.pose.position.x), (global_obs_detect_goal[1] - current_car_pose.pose.pose.position.y), 0);
     Eigen::Vector3d local_goal = rotation_mat.inverse() * local_point;
@@ -474,4 +520,192 @@ void OBS_DETECT::publish_path(std::vector<signed char> &occugrid_flat){
     new_grid.info.origin.position.y-= shift_in_global_coords[1];
     new_grid.data = occugrid_flat;
     path_pub->publish(new_grid);
+}
+
+void OBS_DETECT::preprocess_lidar(std::vector<float>& ranges, int num_readings)
+{
+    std::vector<float> old_ranges;
+    old_ranges = ranges;
+
+    // 1.Setting each value to the mean over some window
+    float running_mean = 0.0;
+    ranges[0] = old_ranges[0];
+    for(int i = 1; i < (num_readings - 1); i++){
+        running_mean = 0.0;
+        for(int j = -1; j < 2; j++){
+            running_mean += old_ranges[i + j];
+        }
+        ranges[i] = running_mean/3.0;
+        if (ranges[i] < 0){
+            ranges[i] = 0;
+        }
+    }
+    ranges[num_readings -1] = old_ranges[num_readings - 1];
+
+    //2.Rejecting high values
+    for(int i = 0; i < num_readings; i++) {
+        if (ranges[i] > max_range_threshold) {
+            ranges[i] = max_range_threshold;
+        }
+    }
+
+    return;
+}
+
+int* OBS_DETECT::find_max_gap(std::vector<float>& ranges, int num_readings)
+{
+    // Return the start index & end index of the max gap
+    int current_gap_width = 0; // width of the current gap being tested
+    int max_gap_width = 0; // largest gap found so far
+    int gap_flag = 0; // 0 for no gap, 1 for gap
+    int current_start_idx = 0; // start index for current gap being tested
+
+    int start_idx = 0; // overall largest gap start
+    int end_idx = 0; // overall largest gap end
+
+    static int gap_idxes[2];
+
+    for(int i = 0; i < num_readings; i++){
+        if (ranges[i] > 0.0){
+            if(gap_flag == 0){
+                //New gap
+                current_start_idx = i;
+            }
+            gap_flag = 1;
+            current_gap_width +=1;
+        } else {
+            if(gap_flag == 1){
+                //Gap ended
+                if(current_gap_width > max_gap_width){
+                    //New largest gap
+                    start_idx = current_start_idx;
+                    end_idx = i -1;
+                    max_gap_width = current_gap_width;
+                }
+            }
+            gap_flag = 0;
+            current_gap_width = 0;
+        }
+    }
+    if(current_gap_width > max_gap_width){
+        start_idx = current_start_idx;
+        end_idx = num_readings - 1;
+    }
+
+    gap_idxes[0] = start_idx;
+    gap_idxes[1] = end_idx;
+    return gap_idxes;
+}
+
+int OBS_DETECT::find_disparities(std::vector<int>& disp_idx, std::vector<float>& ranges, int num_readings)
+{
+    int disp_count = 0;
+    for(int i = 1; i < num_readings; i++){
+        if (abs(ranges[i] - ranges[i-1]) > disp_threshold){
+            //RCLCPP_INFO(this->get_logger(), "Disparity IDX [%d], Range 1: %f  Range 2:%f", i, ranges[i], ranges[i-1]);
+            //there is a disparity
+            if (ranges[i] < ranges[i -1]){
+                disp_idx.push_back(i);
+            } else{
+                disp_idx.push_back(i-1);
+            }
+            disp_count += 1;
+        }
+    }
+    return disp_count;
+}
+
+void OBS_DETECT::set_disparity(std::vector<float>& ranges, int num_points, std::vector<int>& disp_idx, int num_disp, float angle_increment, std::vector<float>& ranges_clean){
+    float theta;
+    int n;
+    float n_float;
+    int bubble_idx;
+    float bubble_dist;
+
+    for (int i=0; i<num_disp; i++){
+        bubble_idx = disp_idx[i];
+
+        bubble_dist = ranges_clean[bubble_idx];
+
+        if(bubble_dist > bubble_dist_threshold){
+            continue;
+        }
+
+        theta = atan2((car_width /2.0), bubble_dist);
+        n_float = theta/angle_increment; //Is 270 radians!!!!
+        n = static_cast<int>(n_float);
+        //RCLCPP_INFO(this->get_logger(), "Bubble idx [%d], N value [%d], Theta [%f],  Bubble range [%f]", bubble_idx, n, theta, ranges_clean[bubble_idx]);
+
+
+        //Cases to fix out of bounds errors
+        if (bubble_idx + n > num_points){
+            n = num_points - bubble_idx;
+        }
+        if (bubble_idx - n < 0.0 ){
+            n = bubble_idx;
+        }
+
+        //Set points within bubble to zero
+        for (int j = 0; j < n + 1; j++){
+            if (bubble_dist < ranges[bubble_idx + j]){
+                ranges[bubble_idx + j] = bubble_dist;
+            }
+
+        }
+        for (int j = 0; j < n + 1; j++){
+            if (bubble_dist < ranges[bubble_idx - j]){
+                ranges[bubble_idx - j] = bubble_dist;
+            }
+        }
+
+        /*Debugging
+        for (int i = 0; i < 5; i++){
+            RCLCPP_INFO(this->get_logger(), "IDX[%d], Range [%f]", bubble_idx + i, ranges[bubble_idx + i]);
+        }
+        */
+    }
+}
+
+void OBS_DETECT::set_close_bubble(std::vector<float>& ranges, std::vector<float>& angles, int num_points, float angle_increment){
+    int close_idx;
+    float low_val = 100.0;
+
+    //Find the closest point
+    for (int i = 0; i < num_points; i++){
+        if (ranges[i] < low_val){
+            low_val = ranges[i];
+            close_idx = i;
+        }
+    }
+    float theta;
+    int n;
+    float n_float;
+    int bubble_idx;
+
+    bubble_idx = close_idx;
+
+    //Use trig to find number of points to eliminate
+    theta = atan2((car_width /2.0), ranges[bubble_idx]);
+    n_float = theta/angle_increment; //Is 270 radians!!!!
+    n = static_cast<int>(n_float);
+    //RCLCPP_INFO(this->get_logger(), "Bubble CLOSE- idx [%d], angle[%f], N value [%f], range [%f]", bubble_idx, angles[bubble_idx], n_float, ranges[bubble_idx]);
+
+
+    //Cases to fix out of bounds errors
+    int n_up = n;
+    int n_down = n;
+    if (bubble_idx + n > num_points){
+        n_up = num_points - bubble_idx;
+    }
+    if (bubble_idx - n < 0.0 ){
+        n_down = bubble_idx;
+    }
+
+    //Set points within bubble to zero
+    for (int j = 0; j < n_up + 1; j++){
+        ranges[bubble_idx + j] = 0.0;
+    }
+    for (int j = 0; j < n_down + 1; j++){
+        ranges[bubble_idx - j] = 0.0;
+    }
 }
