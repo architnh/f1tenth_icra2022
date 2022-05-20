@@ -106,8 +106,13 @@ private:
 
     // random generator, use this
     std::mt19937 gen;
-    std::uniform_real_distribution<> x_dist;
-    std::uniform_real_distribution<> y_dist;
+    //XY method
+    // std::uniform_real_distribution<> x_dist;
+    // std::uniform_real_distribution<> y_dist;
+
+    //R-Theta method
+    std::uniform_real_distribution<> rand1;
+    std::uniform_real_distribution<> rand2;
 
     // callbacks
     // where rrt actually happens
