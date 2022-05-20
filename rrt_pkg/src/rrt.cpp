@@ -430,14 +430,26 @@ std::vector<double> RRT::sample() {
 
     std::vector<double> sampled_point;
 
-    // TODO: fill in this method
-    double x_rand = (x_dist(gen) - .5) * occu_grid_x_size  * resolution + (occu_grid_x_size * 0.2 * resolution);
-    double y_rand = (y_dist(gen) - .5) * occu_grid_y_size  * resolution;
+    // XY Method
+    // double x_rand = (x_dist(gen) - .5) * occu_grid_x_size  * resolution + (occu_grid_x_size * 0.2 * resolution);
+    // double y_rand = (y_dist(gen) - .5) * occu_grid_y_size  * resolution;
+
+    // sampled_point.push_back(x_rand);
+    // sampled_point.push_back(y_rand);
+
+    // R-Theta Method
+    double theta = (rand1(gen) - .5) * 1.57; //scale from -1.57 to 1.57
+    double r = rand2(gen)*6; //
+    double x_rand = r*cos(theta);
+    double y_rand = r*sin(theta);
 
     sampled_point.push_back(x_rand);
-    sampled_point.push_back(y_rand);
+    sampled_point.push_back(y_rand);        
+    // std::cout<<"r: "<<r<<std::endl;        
+    // std::cout<<"theta: "<<theta<<std::endl;
 
     return sampled_point;
+
 }
 
 int RRT::nearest(std::vector<RRT_Node> &tree, std::vector<double> &sampled_point) {
