@@ -49,6 +49,7 @@ public:
     int center_y_min = occu_grid_y_size_min/2;
     int center_y = center_y_min;
     int center_x = 10;// occu_grid_x_size * 0.05; //occu_grid_x_size/2;
+    float line_width_padding = 0.025;
 
     //Pose information
     Eigen::Quaterniond q;
@@ -112,6 +113,8 @@ private:
     std::vector<std::vector<int>> bresenhams_line_algorithm(int goal_point[2], int origin_point[2]);
     int find_spline_index(float x, float y);
     int find_obs_detect_goal_idx(float l_dist, std::vector<std::vector<float>> spline_points, int car_idx);
+    std::vector<std::vector<int>> draw_connecting_line(int origin_point[2], int goal_point[2]);
+    int* spline_point2occu_coordinate(int spline_idx, int* occu_point);
 
     //Publisher functions
     void publish_grid(std::vector<signed char> &occugrid_flat);
@@ -123,6 +126,7 @@ private:
     int find_disparities(std::vector<int>& disp_idx, std::vector<float>& ranges, int num_readings);
     void set_disparity(std::vector<float>& ranges, int num_points, std::vector<int>& disp_idx, int num_disp, float angle_increment, std::vector<float>& ranges_clean);
     void set_close_bubble(std::vector<float>& ranges, std::vector<float>& angles, int num_points, float angle_increment);
+    void find_and_publish_gap(const sensor_msgs::msg::LaserScan::ConstSharedPtr scan_msg);
 
 
 };
