@@ -36,13 +36,13 @@ public:
 
     //Define Occupancy Grid Parameters
     float update_rate = 0.0001;//0.04;//Time between updating rrt graph. Time to execute RRT* is around 0.0001 min to 0.002 sec. Recommended to keep above 0.03
-    const static int occu_grid_x_size=150;//135;//always make this an even number
+    const static int occu_grid_x_size=140;//135;//always make this an even number
     const static int occu_grid_y_size=70;//125;//always make this an even
     const float  resolution=0.04;
     const static int x_size=  occu_grid_x_size/0.04;  //WARNING IF YOU CHANGE RESOLUTION, ALSO CHANGE THE DIVIDE BY NUMBER IN THE TWO VARIABLES BELOW
     const static int y_size= occu_grid_y_size/0.04;  //WARNING IF YOU CHANGE RESOLUTION, ALSO CHANGE THE DIVIDE BY NUMBER IN THE TWO VARIABLES BELOW
     const static int center_y = occu_grid_y_size/2;
-    const static int center_x = occu_grid_x_size * 0.2; //occu_grid_x_size/2;
+    const static int center_x = occu_grid_x_size * 0.05; //occu_grid_x_size/2;
     int occu_grid[x_size][y_size]= {0};
 
     //Pose information
@@ -58,7 +58,7 @@ public:
     rclcpp::Time previous_time = rclcpp::Clock().now();
     bool use_coll_avoid=false;
     float collision_l;
-    float collision_time_buffer = 0.5; //s
+    float collision_time_buffer = 1.0; //s
 
 
 private:
