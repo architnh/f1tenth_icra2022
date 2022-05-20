@@ -123,6 +123,7 @@ private:
     int find_disparities(std::vector<int>& disp_idx, std::vector<float>& ranges, int num_readings);
     void set_disparity(std::vector<float>& ranges, int num_points, std::vector<int>& disp_idx, int num_disp, float angle_increment, std::vector<float>& ranges_clean);
     void set_close_bubble(std::vector<float>& ranges, std::vector<float>& angles, int num_points, float angle_increment);
+    void find_and_publish_gap(const sensor_msgs::msg::LaserScan::ConstSharedPtr scan_msg);
 
 
 };

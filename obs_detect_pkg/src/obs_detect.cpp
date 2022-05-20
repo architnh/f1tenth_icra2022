@@ -80,47 +80,7 @@ void OBS_DETECT::scan_callback(const sensor_msgs::msg::LaserScan::ConstSharedPtr
 
 
     if(publish_thetas == true){
-        std::vector<float> angles_raw;
-        float cur_angle;
-        int num_readings = scan_msg->ranges.size();
-        for(int i = 0; i < scan_msg->ranges.size(); i++){
-            cur_angle = (scan_msg->angle_increment * i) + (scan_msg->angle_min);
-            angles_raw.push_back(cur_angle);
-        }
-        //Find the start and end of the angle cutoff
-        //Reduces the number of ranges looked at
-        int cutoff_start_idx;
-        int cutoff_end_idx;
-        for(int i = 0; i < num_readings; i++){
-            if (angles_raw[i] > (angle_cutoff * -1.0)){
-                cutoff_start_idx = i;
-                break;
-            }
-        }
-        for(int i = 0; i < num_readings; i++){
-            if (angles_raw[i] > (angle_cutoff)){
-                cutoff_end_idx = i;
-                break;
-            }
-        }
-        int num_readings_p = cutoff_end_idx - cutoff_start_idx;
-        //Create new "processed" angle and ranges vectors as a subset of the raw ranges and angles
-        std::vector<float> ranges_p(&scan_msg->ranges[cutoff_start_idx], &scan_msg->ranges[cutoff_end_idx]);
-        std::vector<float> angles_p(&angles_raw[cutoff_start_idx], &angles_raw[cutoff_end_idx]);
-        preprocess_lidar(ranges_p, num_readings_p); //updates ranges_p
-        int num_disp;
-        std::vector<int> disp_idx;
-        num_disp = find_disparities(disp_idx, ranges_p, num_readings_p);
-        //RCLCPP_INFO(this->get_logger(), "Number of disparities: %d", num_disp);
-        std::vector<float> ranges_p_clean = ranges_p;
-        set_disparity(ranges_p, num_readings_p, disp_idx, num_disp, scan_msg->angle_increment, ranges_p_clean); 
-        set_close_bubble(ranges_p, angles_p, num_readings_p, scan_msg->angle_increment);
-        int *gap_idxes = find_max_gap(ranges_p, num_readings_p); //find the drive idx from the max gap
-        //RCLCPP_INFO(this->get_logger(), "Gap start: %d, Gap end %d", gap_idxes[0], gap_idxes[1]);
-        auto gap_theta_msg = std_msgs::msg::Float32MultiArray();
-        std::vector<float> gap_data = {angles_p[gap_idxes[0]], angles_p[gap_idxes[1]]};
-        gap_theta_msg.data = gap_data;
-        gap_theta_pub->publish(gap_theta_msg);
+        find_and_publish_gap(scan_msg);
     }
 
 
@@ -215,6 +175,8 @@ void OBS_DETECT::check_to_activate_obs_avoid(std::vector<signed char> &occugrid_
             if (run_check == true){
             int origin_idx;
             int goal_idx = car_spline_idx;
+
+            
             for(int b=0; b <= iterations; b+=1){
                 origin_idx = goal_idx;
                 goal_idx += increment;
@@ -353,6 +315,50 @@ void OBS_DETECT::drive_callback(const ackermann_msgs::msg::AckermannDriveStamped
     ackermann_msgs::msg::AckermannDriveStamped msg = *drive_msg;
     current_car_speed = msg.drive.speed; 
     collision_l = current_car_speed * collision_time_buffer;
+}
+
+void OBS_DETECT::find_and_publish_gap(const sensor_msgs::msg::LaserScan::ConstSharedPtr scan_msg){
+    std::vector<float> angles_raw;
+    float cur_angle;
+    int num_readings = scan_msg->ranges.size();
+    for(int i = 0; i < scan_msg->ranges.size(); i++){
+        cur_angle = (scan_msg->angle_increment * i) + (scan_msg->angle_min);
+        angles_raw.push_back(cur_angle);
+    }
+    //Find the start and end of the angle cutoff
+    //Reduces the number of ranges looked at
+    int cutoff_start_idx;
+    int cutoff_end_idx;
+    for(int i = 0; i < num_readings; i++){
+        if (angles_raw[i] > (angle_cutoff * -1.0)){
+            cutoff_start_idx = i;
+            break;
+        }
+    }
+    for(int i = 0; i < num_readings; i++){
+        if (angles_raw[i] > (angle_cutoff)){
+            cutoff_end_idx = i;
+            break;
+        }
+    }
+    int num_readings_p = cutoff_end_idx - cutoff_start_idx;
+    //Create new "processed" angle and ranges vectors as a subset of the raw ranges and angles
+    std::vector<float> ranges_p(&scan_msg->ranges[cutoff_start_idx], &scan_msg->ranges[cutoff_end_idx]);
+    std::vector<float> angles_p(&angles_raw[cutoff_start_idx], &angles_raw[cutoff_end_idx]);
+    preprocess_lidar(ranges_p, num_readings_p); //updates ranges_p
+    int num_disp;
+    std::vector<int> disp_idx;
+    num_disp = find_disparities(disp_idx, ranges_p, num_readings_p);
+    //RCLCPP_INFO(this->get_logger(), "Number of disparities: %d", num_disp);
+    std::vector<float> ranges_p_clean = ranges_p;
+    set_disparity(ranges_p, num_readings_p, disp_idx, num_disp, scan_msg->angle_increment, ranges_p_clean); 
+    set_close_bubble(ranges_p, angles_p, num_readings_p, scan_msg->angle_increment);
+    int *gap_idxes = find_max_gap(ranges_p, num_readings_p); //find the drive idx from the max gap
+    //RCLCPP_INFO(this->get_logger(), "Gap start: %d, Gap end %d", gap_idxes[0], gap_idxes[1]);
+    auto gap_theta_msg = std_msgs::msg::Float32MultiArray();
+    std::vector<float> gap_data = {angles_p[gap_idxes[0]], angles_p[gap_idxes[1]]};
+    gap_theta_msg.data = gap_data;
+    gap_theta_pub->publish(gap_theta_msg);
 }
 
 /// FUNCTIONS FOR DETECTING OBS_DETECT ON/OFF ///
@@ -657,12 +663,6 @@ void OBS_DETECT::set_disparity(std::vector<float>& ranges, int num_points, std::
                 ranges[bubble_idx - j] = bubble_dist;
             }
         }
-
-        /*Debugging
-        for (int i = 0; i < 5; i++){
-            RCLCPP_INFO(this->get_logger(), "IDX[%d], Range [%f]", bubble_idx + i, ranges[bubble_idx + i]);
-        }
-        */
     }
 }
 
@@ -688,7 +688,6 @@ void OBS_DETECT::set_close_bubble(std::vector<float>& ranges, std::vector<float>
     theta = atan2((car_width /2.0), ranges[bubble_idx]);
     n_float = theta/angle_increment; //Is 270 radians!!!!
     n = static_cast<int>(n_float);
-    //RCLCPP_INFO(this->get_logger(), "Bubble CLOSE- idx [%d], angle[%f], N value [%f], range [%f]", bubble_idx, angles[bubble_idx], n_float, ranges[bubble_idx]);
 
 
     //Cases to fix out of bounds errors
