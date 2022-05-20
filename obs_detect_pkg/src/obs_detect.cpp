@@ -65,6 +65,7 @@ OBS_DETECT::OBS_DETECT(): rclcpp::Node("obs_detect_node"){
     rotation_mat = q.normalized().toRotationMatrix();
     current_car_speed = 0.0;
     collision_l = 3.0;
+    
 }
 
 /// MAIN CALLBACK FUNCTIONS///
@@ -76,13 +77,37 @@ void OBS_DETECT::scan_callback(const sensor_msgs::msg::LaserScan::ConstSharedPtr
     //    listed_data: A new occupancy grid
     //    checks if we need to use gap follow
 
-    //std::cout<<"Scan callback"<<std::endl;
-    int x_scan;
-    int y_scan;
-    std::memset(occu_grid, 0, sizeof occu_grid);
+    //Find the position of the local goal
+    
+    global_obs_detect_goal = spline_points[goal_spline_idx];
+    Eigen::Vector3d local_point((global_obs_detect_goal[0] - current_car_pose.pose.pose.position.x), (global_obs_detect_goal[1] - current_car_pose.pose.pose.position.y), 0);
+    Eigen::Vector3d local_goal = rotation_mat.inverse() * local_point;
+    int x_goal = (local_goal[0]/resolution) + center_x;
+    int y_goal = (local_goal[1]/resolution) + center_y;
+
+    
+    if (x_goal > occu_grid_x_size_min){
+        occu_grid_x_size = x_goal + 3;
+    }else{
+        occu_grid_x_size = occu_grid_x_size_min;
+    }
+
+    if (y_goal < 0){
+        occu_grid_y_size = occu_grid_y_size_min - y_goal + 3;
+        center_y = occu_grid_y_size - center_y_min;
+    } else if(y_goal > occu_grid_y_size_min){
+        occu_grid_y_size = y_goal + 3;
+        center_y = center_y_min;
+    } else {
+        occu_grid_y_size = occu_grid_y_size_min;
+        center_y = center_y_min;
+    }
+    
     std::vector<signed char> occugrid_flat(occu_grid_y_size * occu_grid_x_size);
 
     //Build the occupancy grid
+    int x_scan;
+    int y_scan;
     for(int i=0; i<scan_msg->ranges.size(); i++){
         if (std::isnan(scan_msg->ranges[i])==false && std::isinf(scan_msg->ranges[i])==false && scan_msg->ranges[i]!=0){
             //Find the location of the scan in occugrid x and y coordinates
@@ -93,7 +118,6 @@ void OBS_DETECT::scan_callback(const sensor_msgs::msg::LaserScan::ConstSharedPtr
                 for(int k=-1 + y_scan;k<1 + y_scan;k++){
                     if(j+center_x >0 && j+center_x <occu_grid_x_size){
                         if(k+center_y >0 && k+center_y <occu_grid_y_size){
-                            occu_grid[(j+center_x)][occu_grid_y_size-(k+center_y)] = 100;
                             occugrid_flat[((k  + center_y)* occu_grid_x_size) + (j + center_x)]=100;
                         }
                     }
@@ -128,133 +152,130 @@ void OBS_DETECT::check_to_activate_obs_avoid(std::vector<signed char> &occugrid_
         goal_global[1] += current_car_pose.pose.pose.position.y;
         */
 
-        int car_spline_idx = find_spline_index(current_car_pose.pose.pose.position.x, current_car_pose.pose.pose.position.y);
-        int goal_spline_idx = find_obs_detect_goal_idx(collision_l, spline_points, car_spline_idx);
-        std::vector<float> global_goal = spline_points[goal_spline_idx];
-        int max_spline_idx = spline_points.size();
+        if (got_pose_flag == true){
+            int max_spline_idx = spline_points.size();
 
-        int increment = 10;
-        int iterations = 0;
-        bool run_check = true;
-        if (goal_spline_idx - car_spline_idx > 0){
-            iterations = (goal_spline_idx - car_spline_idx)/increment;
-        } else if (goal_spline_idx - car_spline_idx < 0) {
-            iterations = (max_spline_idx - car_spline_idx + goal_spline_idx)/increment;
-        } else{
-          run_check = false;
-        }
-        std::vector<std::vector<int>> grid_interp_points;
-        if (run_check == true){
-          int origin_idx;
-          int goal_idx = car_spline_idx;
-          for(int b=0; b <= iterations; b+=1){
-              origin_idx = goal_idx;
-              goal_idx += increment;
-              if (goal_idx >= max_spline_idx){
-                  goal_idx = goal_idx - max_spline_idx;
-              }
-              if (origin_idx >= max_spline_idx){
-                  origin_idx = origin_idx - max_spline_idx;
-              }
-              if (b == iterations){
-                goal_idx = goal_spline_idx;
-              }
-              float x_goal = spline_points[goal_idx][0] - current_car_pose.pose.pose.position.x;
-              float y_goal = spline_points[goal_idx][1] - current_car_pose.pose.pose.position.y;
-              float x_origin = spline_points[origin_idx][0] - current_car_pose.pose.pose.position.x;
-              float y_origin = spline_points[origin_idx][1]- current_car_pose.pose.pose.position.y;
-
-
-              Eigen::Vector3d shift_coords_origin(x_origin, y_origin, 0);
-              Eigen::Vector3d local_origin = rotation_mat.inverse() * shift_coords_origin;
-
-              Eigen::Vector3d shift_coords_goal(x_goal, y_goal, 0);
-              Eigen::Vector3d local_goal = rotation_mat.inverse() * shift_coords_goal;
-
-
-              //Convert to occu coordinates
-              //If on first iteration, connect car to spline
-              int goal_point[2];
-              int origin_point[2];
-              if(b==0){
-                  goal_point[0] = (local_goal[0]/resolution)+center_x;
-                  goal_point[1] = (local_goal[1]/resolution)+center_y;
-                  origin_point[0] = center_x;
-                  origin_point[1]= center_y;
-              }else{
-                  goal_point[0] = (local_goal[0]/resolution)+center_x;
-                  goal_point[1] = (local_goal[1]/resolution)+center_y;
-                  origin_point[0] =(local_origin[0]/resolution)+center_x;
-                  origin_point[1] =(local_origin[1]/resolution)+center_y;
-              }
-
-                std::vector<std::vector<int>> temp_grid_interp_points;
-                temp_grid_interp_points = bresenhams_line_algorithm(goal_point,origin_point);
-
-
-                
-                //Make Interp Points Wider
-                //Add 9 cm to each side
-                int add_val_x = abs((0.025 / resolution)); //0.1
-                int add_val_y = abs((0.025 / resolution)); //0.1
-                if(add_val_x==0){
-                    add_val_x=1;
+            int increment = 10;
+            int iterations = 0;
+            bool run_check = true;
+            if (goal_spline_idx - car_spline_idx > 0){
+                iterations = (goal_spline_idx - car_spline_idx)/increment;
+            } else if (goal_spline_idx - car_spline_idx < 0) {
+                iterations = (max_spline_idx - car_spline_idx + goal_spline_idx)/increment;
+            } else{
+            run_check = false;
+            }
+            std::vector<std::vector<int>> grid_interp_points;
+            if (run_check == true){
+            int origin_idx;
+            int goal_idx = car_spline_idx;
+            for(int b=0; b <= iterations; b+=1){
+                origin_idx = goal_idx;
+                goal_idx += increment;
+                if (goal_idx >= max_spline_idx){
+                    goal_idx = goal_idx - max_spline_idx;
                 }
-                if(add_val_y==0){
-                    add_val_y=1;
+                if (origin_idx >= max_spline_idx){
+                    origin_idx = origin_idx - max_spline_idx;
                 }
-                int size_val= temp_grid_interp_points.size();
-                //std::cout<<"4"<<std::endl;
-                for(int i=0;i<size_val;i++){
-                    for(int j=-add_val_y;j<add_val_y;j++){
-                        for(int k=-add_val_x;k<add_val_x;k++){
-                            if(temp_grid_interp_points[i][0]+k >0 && temp_grid_interp_points[i][0]+k <occu_grid_x_size){
-                                if( temp_grid_interp_points[i][1]+j >0 && temp_grid_interp_points[i][1]+j <occu_grid_y_size){
-                                    int x_val = temp_grid_interp_points[i][0]+k;
-                                    int y_val = temp_grid_interp_points[i][1]+j;
-                                    std::vector<int> add_points{x_val,y_val};
-                                    if(x_val >0 && x_val <occu_grid_x_size){
-                                        if( y_val >0 && y_val <occu_grid_y_size){
-                                            temp_grid_interp_points.push_back(add_points);
+                if (b == iterations){
+                    goal_idx = goal_spline_idx;
+                }
+                float x_goal = spline_points[goal_idx][0] - current_car_pose.pose.pose.position.x;
+                float y_goal = spline_points[goal_idx][1] - current_car_pose.pose.pose.position.y;
+                float x_origin = spline_points[origin_idx][0] - current_car_pose.pose.pose.position.x;
+                float y_origin = spline_points[origin_idx][1]- current_car_pose.pose.pose.position.y;
+
+
+                Eigen::Vector3d shift_coords_origin(x_origin, y_origin, 0);
+                Eigen::Vector3d local_origin = rotation_mat.inverse() * shift_coords_origin;
+
+                Eigen::Vector3d shift_coords_goal(x_goal, y_goal, 0);
+                Eigen::Vector3d local_goal = rotation_mat.inverse() * shift_coords_goal;
+
+
+                //Convert to occu coordinates
+                //If on first iteration, connect car to spline
+                int goal_point[2];
+                int origin_point[2];
+                if(b==0){
+                    goal_point[0] = (local_goal[0]/resolution)+center_x;
+                    goal_point[1] = (local_goal[1]/resolution)+center_y;
+                    origin_point[0] = center_x;
+                    origin_point[1]= center_y;
+                }else{
+                    goal_point[0] = (local_goal[0]/resolution)+center_x;
+                    goal_point[1] = (local_goal[1]/resolution)+center_y;
+                    origin_point[0] =(local_origin[0]/resolution)+center_x;
+                    origin_point[1] =(local_origin[1]/resolution)+center_y;
+                }
+
+                    std::vector<std::vector<int>> temp_grid_interp_points;
+                    temp_grid_interp_points = bresenhams_line_algorithm(goal_point,origin_point);
+                    
+                    //Make Interp Points Wider
+                    //Add 9 cm to each side
+                    int add_val_x = abs((0.025 / resolution)); //0.1
+                    int add_val_y = abs((0.025 / resolution)); //0.1
+                    if(add_val_x==0){
+                        add_val_x=1;
+                    }
+                    if(add_val_y==0){
+                        add_val_y=1;
+                    }
+                    int size_val= temp_grid_interp_points.size();
+                    //std::cout<<"4"<<std::endl;
+                    for(int i=0;i<size_val;i++){
+                        for(int j=-add_val_y;j<add_val_y;j++){
+                            for(int k=-add_val_x;k<add_val_x;k++){
+                                if(temp_grid_interp_points[i][0]+k >0 && temp_grid_interp_points[i][0]+k <occu_grid_x_size){
+                                    if( temp_grid_interp_points[i][1]+j >0 && temp_grid_interp_points[i][1]+j <occu_grid_y_size){
+                                        int x_val = temp_grid_interp_points[i][0]+k;
+                                        int y_val = temp_grid_interp_points[i][1]+j;
+                                        std::vector<int> add_points{x_val,y_val};
+                                        if(x_val >0 && x_val <occu_grid_x_size){
+                                            if( y_val >0 && y_val <occu_grid_y_size){
+                                                temp_grid_interp_points.push_back(add_points);
+                                            }
                                         }
                                     }
                                 }
                             }
                         }
                     }
+                    
+
+                grid_interp_points.insert(grid_interp_points.end(), temp_grid_interp_points.begin(), temp_grid_interp_points.end());
                 }
-                
-
-            grid_interp_points.insert(grid_interp_points.end(), temp_grid_interp_points.begin(), temp_grid_interp_points.end());
-          }
-        }
-        std::vector<signed char> path_data(occu_grid_y_size * occu_grid_x_size);
-
-        for(int i=0;i<grid_interp_points.size();i++){
-            if(grid_interp_points[i][1] >= 0 && grid_interp_points[i][0] >= 0){
-                //if( ((grid_interp_points[i][1])* occu_grid_x_size) + (grid_interp_points[i][0]) < (occu_grid_x_size * occu_grid_y_size)){
-                    if(((grid_interp_points[i][1])* occu_grid_x_size) + (grid_interp_points[i][0]) <path_data.size()){
-                        path_data[((grid_interp_points[i][1])* occu_grid_x_size) + (grid_interp_points[i][0])]=100;
-                    }
-                //}
             }
-        }
-        //Check if there is a collision!
-        use_coll_avoid = false;
-        for(int i=0;i<path_data.size();i++){
-            if(path_data[i]==100 && i < occugrid_flat.size() && occugrid_flat[i]==100){
-                //hit_count++;
-                use_coll_avoid = true;
-                break;
+            std::vector<signed char> path_data(occu_grid_y_size * occu_grid_x_size);
+
+            for(int i=0;i<grid_interp_points.size();i++){
+                if(grid_interp_points[i][1] >= 0 && grid_interp_points[i][0] >= 0){
+                    //if( ((grid_interp_points[i][1])* occu_grid_x_size) + (grid_interp_points[i][0]) < (occu_grid_x_size * occu_grid_y_size)){
+                        if(((grid_interp_points[i][1])* occu_grid_x_size) + (grid_interp_points[i][0]) <path_data.size()){
+                            path_data[((grid_interp_points[i][1])* occu_grid_x_size) + (grid_interp_points[i][0])]=100;
+                        }
+                    //}
+                }
             }
+            //Check if there is a collision!
+            use_coll_avoid = false;
+            for(int i=0;i<path_data.size();i++){
+                if(path_data[i]==100 && i < occugrid_flat.size() && occugrid_flat[i]==100){
+                    //hit_count++;
+                    use_coll_avoid = true;
+                    break;
+                }
+            }
+
+
+            publish_path(path_data);
+
+            auto use_coll_avoid_msg= std_msgs::msg::Bool();
+            use_coll_avoid_msg.data = use_coll_avoid;
+            use_avoid_pub->publish(use_coll_avoid_msg);
         }
-
-
-        publish_path(path_data);
-
-        auto use_coll_avoid_msg= std_msgs::msg::Bool();
-        use_coll_avoid_msg.data = use_coll_avoid;
-        use_avoid_pub->publish(use_coll_avoid_msg);
 
     }
     catch(...){
@@ -275,6 +296,9 @@ void OBS_DETECT::pose_callback(const nav_msgs::msg::Odometry::ConstSharedPtr pos
     q.w()= current_car_pose.pose.pose.orientation.w;
     rotation_mat = q.normalized().toRotationMatrix();
 
+    car_spline_idx = find_spline_index(current_car_pose.pose.pose.position.x, current_car_pose.pose.pose.position.y);
+    goal_spline_idx = find_obs_detect_goal_idx(collision_l, spline_points, car_spline_idx);
+    got_pose_flag = true;
 }
 
 void OBS_DETECT::drive_callback(const ackermann_msgs::msg::AckermannDriveStamped::ConstSharedPtr drive_msg) {
