@@ -15,7 +15,7 @@ from nav_msgs.msg import Odometry
 from std_msgs.msg import Bool
 from visualization_msgs.msg import Marker
 from visualization_msgs.msg import MarkerArray
-
+import pdb 
 
 class PurePursuit(Node):
     """
@@ -25,9 +25,9 @@ class PurePursuit(Node):
         super().__init__('pure_pursuit_node')
 
         # User inputs
-        traj_csv = "good_real_points.csv" #Name of csv in racelines directory
+        traj_csv = "spiel_map.csv" #Name of csv in racelines directory
         self.sim_flag = True  # Set flag true for simulation, false for real
-        self.speed_override = 3.0 #Set to None for there to be no speed override
+        self.speed_override = None #Set to None for there to be no speed override
 
         # Define paths
         pkg_dir = os.path.join(os.getcwd(), 'src', 'pure_pursuit_pkg', 'pure_pursuit_pkg')
@@ -50,14 +50,19 @@ class PurePursuit(Node):
 
         # Convert waypoints to spline
         self.pp_waypoints = load_from_csv(traj_csv, clicked=True, scaler=1)
-        spline_data, m = interpolate.splprep([self.pp_waypoints[:, 0], self.pp_waypoints[:, 1]], s=0, per=True)
-        self.pp_x_spline, self.pp_y_spline = interpolate.splev(np.linspace(0, 1, 1000), spline_data)
+        # pdb.set_trace()
+        print(np.shape(self.pp_waypoints.T))
+        print(type(self.pp_waypoints.T))
+        self.pp_x_spline, self.pp_y_spline, self.pp_vel_spline, self.pp_accl_spline = self.pp_waypoints.T
+        self.drive_velocity = self.pp_vel_spline
+        # spline_data, m = interpolate.splprep([self.pp_waypoints[:, 0], self.pp_waypoints[:, 1]], s=0, per=True)
+        # self.pp_x_spline, self.pp_y_spline = interpolate.splev(np.linspace(0, 1, 1000), spline_data)
         self.pp_spline_points = np.vstack((self.pp_x_spline, self.pp_y_spline, np.zeros((len(self.pp_y_spline)))))
-        with open(os.path.join(pkg_dir, 'racelines', 'temp', 'spline.csv'), 'w', newline='') as csvfile:
-                writer = csv.writer(csvfile, delimiter=',')
-                for i in range(len(self.pp_x_spline)):
-                        writer.writerow([self.pp_x_spline[i], self.pp_y_spline[i]])
-        self.drive_velocity = np.roll(self.calculate_velocity_profile(self.pp_x_spline, self.pp_y_spline), - self.offset)
+        # with open(os.path.join(pkg_dir, 'racelines', 'temp', 'spline.csv'), 'w', newline='') as csvfile:
+        #         writer = csv.writer(csvfile, delimiter=',')
+        #         for i in range(len(self.pp_x_spline)):
+        #                 writer.writerow([self.pp_x_spline[i], self.pp_y_spline[i]])
+        # self.drive_velocity = np.roll(self.calculate_velocity_profile(self.pp_x_spline, self.pp_y_spline), - self.offset)
 
         #### Obstacle Avoidance ###
         self.use_obs_avoid = False
@@ -393,7 +398,7 @@ def load_from_csv(traj_csv, clicked=False, scaler=10):
         with open(traj_csv, 'r') as f:
             lines = (line for line in f if not line.startswith('#'))
             data = np.loadtxt(lines, delimiter=',')
-        points = data[:, 0:2] / scaler
+        points = data[:, 0:4] / scaler
 
     else:
         with open(traj_csv, 'r') as f:
