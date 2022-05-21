@@ -30,7 +30,7 @@ class PurePursuit(Node):
         self.speed_override = None #Set to None for there to be no speed override
 
         # Define paths
-        pkg_dir = os.path.join(os.getcwd(), 'f1tenth_icra2022','pure_pursuit_pkg', 'pure_pursuit_pkg')
+        pkg_dir = os.path.join(os.getcwd(), 'src', 'f1tenth_icra2022','pure_pursuit_pkg', 'pure_pursuit_pkg')
         traj_csv = os.path.join(pkg_dir, 'racelines', traj_csv)
 
         #### PURE PURSUIT ###
