@@ -20,7 +20,7 @@ OBS_DETECT::~OBS_DETECT() {
 // Constructor of the OBS_DETECT class
 OBS_DETECT::OBS_DETECT(): rclcpp::Node("obs_detect_node"){
     //User inputs
-    bool sim = true;  // Set flag true for simulation, false for real
+    bool sim = false;  // Set flag true for simulation, false for real
 
     // ROS publishers
     grid_pub = this->create_publisher<nav_msgs::msg::OccupancyGrid>(coll_grid_topic,1);

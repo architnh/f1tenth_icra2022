@@ -26,8 +26,8 @@ class PurePursuit(Node):
 
         # User inputs
         traj_csv = "good_real_points.csv" #Name of csv in racelines directory
-        self.sim_flag = True  # Set flag true for simulation, false for real
-        self.speed_override = 3.0 #Set to None for there to be no speed override
+        self.sim_flag = False  # Set flag true for simulation, false for real
+        self.speed_override = None #Set to None for there to be no speed override
 
         # Define paths
         pkg_dir = os.path.join(os.getcwd(), 'src', 'pure_pursuit_pkg', 'pure_pursuit_pkg')
@@ -38,7 +38,7 @@ class PurePursuit(Node):
         self.pp_steer_L = 1.5  # steering look ahead for pure pursuit
         self.kp = 0.25##0.6
         self.kp_rrt = 0.5#
-        self.v_max = 10.0#3#5 #8 #6
+        self.v_max = 6.0#3#5 #8 #6
         self.v_min = 3.5#0.4# #2.5 #1.5  # This value is NOT used for calculations... only keeps the car above a certain value
         self.ay_max = 5.0#0.1#3
         self.ax_max = 6.0#0.1#3
