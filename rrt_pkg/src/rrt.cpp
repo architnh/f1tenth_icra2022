@@ -55,7 +55,8 @@ RRT::RRT(): rclcpp::Node("rrt_node"), gen((std::random_device())()) {
     RCLCPP_INFO(rclcpp::get_logger("RRT"), "%s\n", "Created new RRT Object.");
 
     //Read in spline points
-    std::string file_name = "src/f1tenth_icra2022/pure_pursuit_pkg/pure_pursuit_pkg/racelines/temp/spline.csv";
+    std::string file_name = "/sim_ws/src/pure_pursuit_pkg/pure_pursuit_pkg/racelines/temp/spline.csv";
+    //std::string file_name = "src/f1tenth_icra2022/pure_pursuit_pkg/pure_pursuit_pkg/racelines/temp/spline.csv";
     std::vector<float> row;
     std::string line, number;
     std::fstream file (file_name, ios::in);
@@ -350,7 +351,7 @@ std::vector<RRT_Node> RRT::perform_rrt(){
             node_nearest = nearest(tree, node_rand); //closest neigbor in tree
             node_new = steer(tree[node_nearest], node_rand); //get new point
             node_new.parent = node_nearest; //Record the parent and add to the tree
-            const auto current_node_index = tree.size();
+            auto current_node_index = tree.size();
 
             collision = check_collision(tree[node_nearest], node_new); //Check if the random node collides with the wall
             if(collision == false){
@@ -401,6 +402,10 @@ std::vector<RRT_Node> RRT::perform_rrt(){
                 return output_path;
                 //break;
             }
+            }
+            else{
+                delete &node_new;
+                current_node_index -= 1;
             }
         }
 
