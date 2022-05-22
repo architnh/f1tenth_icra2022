@@ -42,8 +42,9 @@ RRT::RRT(): rclcpp::Node("rrt_node"), gen((std::random_device())()) {
         string pose_topic = "pf/pose/odom";
         pose_sub_ = this->create_subscription<nav_msgs::msg::Odometry>(pose_topic, 1, std::bind(&RRT::pose_callback, this, std::placeholders::_1));
     }
-    rrt_use_sub = this->create_subscription<std_msgs::msg::Bool>("/use_obs_avoid", 1, std::bind(&RRT::rrt_use_callback, this, std::placeholders::_1));
-    
+    string rrt_use_topic = "/use_obs_avoid";
+    rrt_use_sub = this->create_subscription<std_msgs::msg::Bool>(rrt_use_topic, 1, std::bind(&RRT::rrt_use_callback, this, std::placeholders::_1));
+
     string scan_topic = "/scan";
     string global_goal_topic = "/global_goal_pure_pursuit";
 
@@ -84,8 +85,8 @@ RRT::RRT(): rclcpp::Node("rrt_node"), gen((std::random_device())()) {
 }
 
 /// MAIN CALLBACK FUNCTIONS///
-void RRT::rrt_use_callback(const std_msgs::msg::Bool rrt_msg) {
-    std::vector<bool> rrt_use_it = rrt_msg->data;
+void RRT::rrt_use_callback(const std_msgs::msg::Bool::ConstSharedPtr rrt_msg) {
+    rrt_use_it = rrt_msg->data;
     std::cout<<"Use rrt?: "<<rrt_use_it<<std::endl;
 }
 

@@ -100,6 +100,7 @@ private:
     rclcpp::Publisher<visualization_msgs::msg::Marker>::SharedPtr goal_pub;
     rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr node_pub;
 
+    rclcpp::Subscription<std_msgs::msg::Bool>::SharedPtr rrt_use_sub;
     rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr pose_sub_;
     rclcpp::Subscription<sensor_msgs::msg::LaserScan>::SharedPtr scan_sub_;
     rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr global_goal_sub_;
@@ -118,6 +119,7 @@ private:
     // where rrt actually happens
     void pose_callback(const nav_msgs::msg::Odometry::ConstSharedPtr pose_msg);
     void scan_callback(const sensor_msgs::msg::LaserScan::ConstSharedPtr scan_msg);
+    void rrt_use_callback(const std_msgs::msg::Bool::ConstSharedPtr scan_msg);
     void global_goal_callback(const nav_msgs::msg::Odometry::ConstSharedPtr goal_msg);
 
     // RRT methods
