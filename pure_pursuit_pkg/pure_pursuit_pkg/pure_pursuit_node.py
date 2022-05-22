@@ -15,7 +15,9 @@ from nav_msgs.msg import Odometry
 from std_msgs.msg import Bool
 from visualization_msgs.msg import Marker
 from visualization_msgs.msg import MarkerArray
-import pdb 
+import pdb
+from geometry_msgs.msg import PoseArray
+from geometry_msgs.msg import Pose
 
 class PurePursuit(Node):
     """
@@ -27,7 +29,7 @@ class PurePursuit(Node):
         # User inputs
         traj_csv = "spiel_map.csv" #Name of csv in racelines directory
         self.sim_flag = True  # Set flag true for simulation, false for real
-        self.speed_override = None #Set to None for there to be no speed override
+        self.speed_override = 1.0 #Set to None for there to be no speed override
 
         # Define paths
         pkg_dir = os.path.join(os.getcwd(), 'src', 'pure_pursuit_pkg', 'pure_pursuit_pkg')
@@ -45,6 +47,7 @@ class PurePursuit(Node):
         self.floor_friction_coeff = 1.0#0.2#1.0 #0.8 #0.4
         self.k = 3.0 #3 #5  # Curvature Scaling Factor
         self.offset = 0.0  # Offset to make car brake before turn, and accelerate out of turn units in spline index steps
+        self.rrt_steer_L = .75
 
         self.spline_index_car = 0  # Index of the car on the spline
 
@@ -73,6 +76,8 @@ class PurePursuit(Node):
             self.pose_subscriber = self.create_subscription(Odometry, 'ego_racecar/odom', self.pose_callback, 1)
         else:
             self.pose_subscriber = self.create_subscription(Odometry, 'pf/pose/odom', self.pose_callback, 1)
+        self.rrt_spline_subscriber = self.create_subscription(PoseArray, 'rrt_spline_points', self.rrt_spline_callback,1)
+        self.rrt_spline_publisher = self.create_publisher(Marker, 'rrt_spline_rviz',1)
 
         self.current_goal_publisher = self.create_publisher(PointStamped, 'pp_current_goal_rviz',1)
         self.spline_publisher = self.create_publisher(Marker, 'pp_spline_rviz',1)
@@ -87,6 +92,133 @@ class PurePursuit(Node):
         self.local_goal = Odometry()
         self.color_data = self.populate_color_spline_points()
 
+
+    def rrt_calculate_velocity_profile(self, x_spline_data, y_spline_data,current_velocity):
+        #CALCULATE DERIVATIVES FOR CURVATURE
+        '''xder1 = np.gradient(x_spline_data,edge_order=2)
+        yder1 = np.gradient(y_spline_data,edge_order=2)
+        xder2 = np.gradient(xder1)
+        yder2 = np.gradient(yder1)
+        curvature = np.abs((xder1 * yder2) - (yder1 * xder2)) / np.power(np.power(xder1,2) + np.power(yder1,2),3/2)
+        xy_points = np.array((x_spline_data, y_spline_data))
+        xy_offset = np.roll(xy_points,1)
+        distances = np.linalg.norm(xy_points -xy_offset, axis=0)
+        distances[0]=0
+        #pass 1
+        ux_friction =np.sqrt((self.floor_friction_coeff * 9.81) / np.abs(curvature * self.k))#Curvature should really be curve radius
+        ux_friction = np.minimum(ux_friction, self.v_max)'''
+
+        ux_start_vel = max(current_velocity -2.5,2.5)
+        #ux_final_vel = max(current_velocity - 2, 0.0)
+        
+        ux = np.ones((len(y_spline_data)))*ux_start_vel
+        #Interpolate between the current velocity and the friction model
+        '''for i in range(len(y_spline_data)):
+            t = i / len(y_spline_data)
+            ux[i] = ux_start_vel + t * (ux_final_vel - ux_start_vel)
+        '''
+        '''ux = ux - 0.5#General Slow Down for RRT* Manuever
+        ux = np.minimum(ux, self.v_max)
+        ux = np.maximum(ux, 0.0)
+        ayi = ux**2 *(curvature * self.k)
+        ayi = np.minimum(ayi,self.ay_max)
+        #Forward pass
+        v_forward=[]
+        for i in range(len(ux)):
+            li = distances[i-1]
+            axi = self.ax_max * np.sqrt(1 - (ayi[i-1] / self.ay_max))
+            v_forward.append(np.sqrt(ux[i-1]**2+(2*axi*li)))
+        v_forward = np.array(v_forward)
+        #Backward Pass
+        v_backward=[]
+        ux = np.flip(v_forward)
+        #ayi = np.flip(ayi)
+        ayi = ux**2 *(curvature * self.k)
+        ayi = np.minimum(ayi,self.ay_max)
+        for i in range(len(distances)):
+            li = distances[i-1]
+            axi = self.ax_max * np.sqrt(1 - (ayi[i-1] / self.ay_max))
+            v_backward.append(np.sqrt(ux[i-1]**2+(2*axi*li)))
+            
+        v_backward = np.array(v_backward)
+        v_backward = np.flip(np.minimum(v_backward, self.v_max))
+        final_velocity_profile = v_backward
+        final_velocity_profile = self.smooth_and_sharpen_velocity(final_velocity_profile)'''
+
+        final_velocity_profile = ux
+
+        return final_velocity_profile
+
+    def rrt_find_goal_point(self, L, current_position):
+        #Returns the global x,y,z position of the goal point
+        try:
+            current_position=np.array([current_position.x, current_position.y, current_position.z])
+        except:
+            current_position=np.array([current_position[0], current_position[1], current_position[2]])
+
+        points_in = self.rrt_spline_points
+        points_in_front = points_in# np.roll(points_in, -self.rrt_spline_index_car, axis=1)
+
+        points_dist = np.linalg.norm(np.roll(points_in_front, -1, axis=1) - points_in_front, axis=0)
+        points_dist = np.cumsum(points_dist)
+        idx = np.argmin(np.abs(points_dist - L))
+        goal_point_car = points_in_front[:, idx]
+
+        #IF GOAL ENDS UP ON TOP OF THE CAR FOR SOME REASON
+        dist = np.linalg.norm(current_position - goal_point_car)
+        if abs(dist) < 0.1:
+            goal_point_car = points_in[:,np.argmax(np.abs(points_dist - L))]
+            
+        return goal_point_car
+
+    def rrt_spline_callback(self, points):
+        all_points =[]
+        try:
+            point_number = int(points.poses[0].position.z)
+            for i in range(int(points.poses[0].position.z)):
+                all_points.append([points.poses[i].position.x,points.poses[i].position.y])
+            all_points = np.flip(np.array(all_points).astype(float),axis=0)
+
+            if(point_number > 3):
+                x = all_points[:,0]
+                y = all_points[:,1]
+                path=[x,y]
+                #CHANGE K= below to change the order of the spline generated
+                tck, u= interpolate.splprep(path, w=None, u=None, ub=None, ue=None, k=2, task=0, s=0.3, t=None, full_output=0, nest=None, per=0, quiet=1)
+                self.rrt_x_spline,self.rrt_y_spline = interpolate.splev( np.linspace( 0, 1, 26), tck)
+                '''x = all_points[:,0]
+                y = all_points[:,1]
+                spline_data, m = interpolate.splprep([x, y], s=0, per=True)
+                self.rrt_x_spline, self.rrt_y_spline = interpolate.splev(np.linspace(0, 1, 26), spline_data)'''
+            elif(point_number >= 3):
+                x = all_points[:,0]
+                y = all_points[:,1]
+                path=[x,y]
+                tck, u= interpolate.splprep(path, w=None, u=None, ub=None, ue=None, k=2, task=0, s=0.2, t=None, full_output=0, nest=None, per=0, quiet=1)
+                self.rrt_x_spline,self.rrt_y_spline = interpolate.splev( np.linspace( 0, 1, 26), tck)
+            elif(point_number >1):
+                x = all_points[:,0]
+                y = all_points[:,1]
+                path=[x,y]
+                tck, u= interpolate.splprep(path, w=None, u=None, ub=None, ue=None, k=1, task=0, s=0.2, t=None, full_output=0, nest=None, per=0, quiet=1)
+                self.rrt_x_spline,self.rrt_y_spline = interpolate.splev( np.linspace( 0, 1, 26), tck)
+
+            if(abs(self.rrt_x_spline[0] - self.rrt_x_spline[-1]) < 0.1 and abs(self.rrt_y_spline[0] - self.rrt_y_spline[-1]) < 0.1 and len(self.rrt_x_spline) > 1):
+                #print("in splitter")
+                self.rrt_spline_points=np.vstack((self.rrt_x_spline[0:int(len(self.rrt_x_spline)/2)], self.rrt_y_spline[0:int(len(self.rrt_y_spline)/2)], np.zeros((int(len(self.rrt_x_spline)/2)))))
+                self.rrt_x_spline = self.rrt_x_spline[0:int(len(self.rrt_x_spline)/2)]
+                self.rrt_y_spline = self.rrt_y_spline[0:int(len(self.rrt_y_spline)/2)]
+            else:
+                self.rrt_spline_points=np.vstack((self.rrt_x_spline, self.rrt_y_spline, np.zeros((len(self.rrt_y_spline)))))
+
+            #Plot Spline on RVIZ
+            self.spline_graph.action = Marker.DELETEALL
+            self.rrt_spline_publisher.publish(self.spline_graph)
+        
+            self.spline_graph = self.rrt_populate_spline_data()
+            self.rrt_spline_publisher.publish(self.spline_graph)
+        except:
+            print("failed to update data")
 
     def pose_callback(self, pose_msg):
         """
@@ -119,11 +251,11 @@ class PurePursuit(Node):
             msg.drive.steering_angle = float(steering_angle)
             self.drive_publisher.publish(msg)
         else:
+            print("use RRT")
             self.rrt_spline_index_car = self.get_closest_point_to_car(current_position, self.rrt_spline_points)
             global_goal_point_rrt = self.rrt_find_goal_point(self.rrt_steer_L, current_position)
             global_goal_point = global_goal_point_rrt # Just for publishing and vizualization purposes
             goal_point_car = self.global_2_local(current_quat, current_position, global_goal_point_rrt)
-            self.publish_rrt_current_goal_point(global_goal_point_rrt)
             steering_angle = self.calc_steer(goal_point_car, self.kp_rrt)
             try:
                 self.rrt_drive_velocity_profile = self.rrt_calculate_velocity_profile(self.rrt_x_spline, self.rrt_y_spline,self.drive_velocity[self.spline_index_car])
@@ -257,6 +389,43 @@ class PurePursuit(Node):
             message.pose.position.z=0.0
             array_values.markers.append(message)
         return array_values
+
+    def rrt_populate_spline_data(self):
+        message = Marker()
+        message.header.frame_id="map"
+        message.type= Marker.LINE_STRIP
+        message.action = Marker.ADD
+        message.scale.x= 0.150
+        message.pose.position.x= 0.0
+        message.pose.position.y= 0.0
+        message.pose.position.z=0.0
+        message.color.a=1.0
+        message.color.r=0.0
+        message.color.b=1.0
+        message.color.g=1.0
+        message.pose.orientation.x=0.0
+        message.pose.orientation.y=0.0
+        message.pose.orientation.z=0.0
+        message.pose.orientation.w=1.0
+
+        for i in range(len(self.rrt_x_spline)-1):
+            message.header.stamp = self.get_clock().now().to_msg()
+            message.id=i
+            point1=Point()
+            point1.x=float(self.rrt_x_spline[i])
+            point1.y=float(self.rrt_y_spline[i])
+            point1.z=0.0
+
+            message.points.append(point1)
+            point2=Point()
+            point2.x=float(self.rrt_x_spline[i+1])
+            point2.y=float(self.rrt_y_spline[i+1])
+            point2.z=0.0
+
+            message.points.append(point2)
+            self.rrt_spline_publisher.publish(message)
+
+        return message
 
     def populate_spline_data(self):
         message = Marker()
