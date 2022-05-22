@@ -118,6 +118,21 @@ class PurePursuit(Node):
                 msg.drive.speed = self.speed_override
             msg.drive.steering_angle = float(steering_angle)
             self.drive_publisher.publish(msg)
+        else:
+            self.rrt_spline_index_car = self.get_closest_point_to_car(current_position, self.rrt_spline_points)
+            global_goal_point_rrt = self.rrt_find_goal_point(self.rrt_steer_L, current_position)
+            global_goal_point = global_goal_point_rrt # Just for publishing and vizualization purposes
+            goal_point_car = self.global_2_local(current_quat, current_position, global_goal_point_rrt)
+            self.publish_rrt_current_goal_point(global_goal_point_rrt)
+            steering_angle = self.calc_steer(goal_point_car, self.kp_rrt)
+            try:
+                self.rrt_drive_velocity_profile = self.rrt_calculate_velocity_profile(self.rrt_x_spline, self.rrt_y_spline,self.drive_velocity[self.spline_index_car])
+                self.rrt_drive_velocity = self.rrt_drive_velocity_profile[self.rrt_spline_index_car]
+            except:
+                print("rrt drive velocity failed, using spline speed instead")
+                self.rrt_drive_velocity = self.drive_velocity[self.spline_index_car]
+            drive_speed = self.rrt_drive_velocity
+
         
         # Global Goal for RRT
         global_goal = Odometry()
@@ -199,6 +214,7 @@ class PurePursuit(Node):
 
     def use_obs_avoid_callback(self, avoid_msg):
         self.use_obs_avoid = avoid_msg.data
+        # self.time_since_last_point = self.get_clock().now()
 
     def global_2_local(self, current_quat, current_position, goal_point_global):
         # Construct transformation matrix from rotation matrix and position

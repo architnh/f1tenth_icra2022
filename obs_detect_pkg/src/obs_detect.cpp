@@ -25,7 +25,7 @@ OBS_DETECT::OBS_DETECT(): rclcpp::Node("obs_detect_node"){
     // ROS publishers
     grid_pub = this->create_publisher<nav_msgs::msg::OccupancyGrid>(coll_grid_topic,1);
     path_pub = this->create_publisher<nav_msgs::msg::OccupancyGrid>(coll_path_topic,1);
-    use_avoid_pub = this->create_publisher<std_msgs::msg::Bool>(use_avoid_topic,1);
+    use_avoid_pub = this->create_publisher<std_msgs::msg::Bool>("/use_obs_avoid",1);
     gap_theta_pub = this->create_publisher<std_msgs::msg::Float32MultiArray>(gap_theta_topic, 1);
 
     // ROS subscribers
