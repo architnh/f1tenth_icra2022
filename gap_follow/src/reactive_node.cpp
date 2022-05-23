@@ -32,8 +32,8 @@ class ReactiveFollowGap : public rclcpp::Node {
         float max_range_threshold = 10.0; //Anything beyond this value is set to this value
         float max_drive_range_threshold = 5.0;
 
-        float min_drive_speed = 3.0; //meters per sec
-        float max_drive_speed =  4.0; // meters/sec
+        float min_drive_speed = 1.0; //meters per sec
+        float max_drive_speed =  1.2; // meters/sec
         float car_width = .60; //Meters
 
         float angle_cutoff = 1.5; //radians

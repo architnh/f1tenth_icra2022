@@ -29,7 +29,7 @@ class PurePursuit(Node):
         tum_raceline = True
         create_custom_vel_profile = False
         self.sim_flag = False  # Set flag True for simulation, False for real
-        self.speed_override = None #Set to None for there to be no speed override
+        self.speed_override = 2.0  #Set to None for there to be no speed override
         self.publish_rviz = True
 
         # Define paths
@@ -54,6 +54,7 @@ class PurePursuit(Node):
         # Convert waypoints to spline
         if tum_raceline:
             self.pp_waypoints, self.drive_velocity = load_from_csv(traj_csv, TUM=tum_raceline)
+            self.pp_waypoints = np.flip(self.pp_waypoints, 0)
             self.pp_x_spline = self.pp_waypoints[:,0]
             self.pp_y_spline = self.pp_waypoints[:,1]
         else: 

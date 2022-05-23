@@ -49,7 +49,7 @@ public:
     int occu_grid_y_size_max = 3 / resolution; //Meters
 
     
-    float collision_time_buffer = 0.5; //s
+    float collision_time_buffer = 2.0; //s
 
 
     //Define Occupancy Grid Parameters
