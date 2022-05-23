@@ -39,9 +39,13 @@ class PurePursuit(Node):
 
         #### PURE PURSUIT ###
         # Pure pursuit parameters
-        self.pp_steer_L = 1.5  # steering look ahead for pure pursuit
-        self.kp = 0.25 ##0.6
-        self.kp_rrt = 0.5 #
+        self.pp_steer_L_fast = 2.5  # steering look ahead for pure pursuit
+        self.pp_steer_L_slow = 1.0
+        self.kp_fast = 0.25
+        self.kp_slow = 0.5
+        self.L_threshold_speed = 3.5 # This is the speed that triggers the slower lookahead
+
+        #Velocity profile parameters
         self.v_max = 5.0 #3#5 #8 #6
         self.v_min = 1.5 # This value is NOT used for calculations... only keeps the car above a certain value
         self.ay_max = 5.0#0.1#3
@@ -112,24 +116,33 @@ class PurePursuit(Node):
         # get the current spline index of the car and goal point
         self.spline_index_car = self.get_closest_point_to_car(current_position, self.pp_spline_points)
 
+        #Determine the speed from the velocity profile
+        drive_speed = self.drive_velocity[self.spline_index_car]
+        if drive_speed < self.v_min: # Dont drive too slow
+            drive_speed = self.v_min
+        if self.speed_override is not None:
+            drive_speed = self.speed_override
+
         # Calculate goal point
-        global_goal_point = self.find_goal_point(self.pp_steer_L)
+        if drive_speed > self.L_threshold_speed:
+            global_goal_point = self.find_goal_point(self.pp_steer_L_fast)
+        else:
+            global_goal_point = self.find_goal_point(self.pp_steer_L_slow)
         local_goal_point = self.global_2_local(current_quat, current_position, global_goal_point)
+        
+        # Calculate steer angle
+        if drive_speed > self.L_threshold_speed:
+            steering_angle = self.calc_steer(local_goal_point, self.kp_fast)
+        else:
+            steering_angle = self.calc_steer(local_goal_point, self.kp_slow)
+
+
         if self.publish_rviz:
             self.publish_current_goal_point(global_goal_point)  # Create RVIZ Purple Dot
-
-        # Decide if using pure pursuit
+        
+        
         if not self.use_obs_avoid:
-            steering_angle = self.calc_steer(local_goal_point, self.kp)
-            drive_speed = self.drive_velocity[self.spline_index_car]
-            if drive_speed < self.v_min: # Dont drive too slow
-                drive_speed = self.v_min
             msg = AckermannDriveStamped()
-            if self.speed_override is None:
-                print(drive_speed)
-                msg.drive.speed = float(drive_speed)###CHANGE THIS BACK, IN SIM THE CHANGING VELOCITY WAS CAUSING PROBLEMS
-            else:
-                msg.drive.speed = self.speed_override
             msg.drive.steering_angle = float(steering_angle)
             self.drive_publisher.publish(msg)
         
