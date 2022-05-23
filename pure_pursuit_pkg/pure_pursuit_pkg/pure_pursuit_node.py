@@ -28,7 +28,7 @@ class PurePursuit(Node):
         traj_csv = "icra_1st.csv" #Name of csv in racelines directory
         tum_raceline = True
         create_custom_vel_profile = True
-        self.sim_flag = False  # Set flag True for simulation, False for real
+        self.sim_flag = True  # Set flag True for simulation, False for real
         self.speed_override = None #Set to None for there to be no speed override
         self.publish_rviz = True
 
