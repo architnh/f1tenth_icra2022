@@ -20,7 +20,7 @@ OBS_DETECT::~OBS_DETECT() {
 // Constructor of the OBS_DETECT class
 OBS_DETECT::OBS_DETECT(): rclcpp::Node("obs_detect_node"){
     //User inputs
-    bool sim = false;  // Set flag true for simulation, false for real
+    bool sim = true;  // Set flag true for simulation, false for real
 
     // ROS publishers
     grid_pub = this->create_publisher<nav_msgs::msg::OccupancyGrid>(coll_grid_topic,1);
@@ -92,17 +92,27 @@ void OBS_DETECT::scan_callback(const sensor_msgs::msg::LaserScan::ConstSharedPtr
     int y_goal = (local_goal[1]/resolution) + center_y;
 
     
-    if (x_goal > occu_grid_x_size_min){
+    if (x_goal > occu_grid_x_size_min && x_goal < occu_grid_x_size_max){
         occu_grid_x_size = x_goal + 3;
-    }else{
+    } else if (x_goal >= occu_grid_x_size_max){
+        occu_grid_x_size = occu_grid_x_size_max;
+    } else{
         occu_grid_x_size = occu_grid_x_size_min;
     }
 
     if (y_goal < 0){
-        occu_grid_y_size = occu_grid_y_size_min - y_goal + 3;
+        if ((occu_grid_y_size_min - y_goal) >= occu_grid_y_size_max){
+            occu_grid_y_size = occu_grid_y_size_max;
+        } else {
+            occu_grid_y_size = occu_grid_y_size_min - y_goal + 3;
+        }
         center_y = occu_grid_y_size - center_y_min;
     } else if(y_goal > occu_grid_y_size_min){
-        occu_grid_y_size = y_goal + 3;
+        if ((occu_grid_y_size_min + y_goal) >= occu_grid_y_size_max){
+            occu_grid_y_size = occu_grid_y_size_max;
+        } else {
+            occu_grid_y_size = y_goal + 3;
+        }
         center_y = center_y_min;
     } else {
         occu_grid_y_size = occu_grid_y_size_min;
@@ -119,133 +129,118 @@ void OBS_DETECT::scan_callback(const sensor_msgs::msg::LaserScan::ConstSharedPtr
             //Find the location of the scan in occugrid x and y coordinates
             x_scan = scan_msg->ranges[i] * cos(scan_msg->angle_increment * i + scan_msg->angle_min) / resolution;
             y_scan = scan_msg->ranges[i] * sin(scan_msg->angle_increment * i + scan_msg->angle_min) / resolution;
-            //Make the scans show up larger on the occupancy grid
-            for(int j=-1 + x_scan;j<1+ x_scan;j++){//8
-                for(int k=-1 + y_scan;k<1 + y_scan;k++){
-                    if(j+center_x >0 && j+center_x <occu_grid_x_size){
-                        if(k+center_y >0 && k+center_y <occu_grid_y_size){
-                            occugrid_flat[((k  + center_y)* occu_grid_x_size) + (j + center_x)]=100;
+
+            if (scan_padding == true){
+                for(int j=-1 + x_scan;j<1+ x_scan;j++){//8
+                    for(int k=-1 + y_scan;k<1 + y_scan;k++){
+                        if(j+center_x >0 && j+center_x <occu_grid_x_size){
+                            if(k+center_y >0 && k+center_y <occu_grid_y_size){
+                                occugrid_flat[((k  + center_y)* occu_grid_x_size) + (j + center_x)]=100;
+                            }
                         }
                     }
+                }
+            } else {
+                if (x_scan + center_x > 0 && x_scan+center_x < occu_grid_x_size && y_scan + center_y > 0 && y_scan+center_y < occu_grid_y_size){
+                    occugrid_flat[((y_scan  + center_y)* occu_grid_x_size) + (x_scan + center_x)]=100;
                 }
             }
         }
     }
-
-    /*
-    // Remove grid points surrounding the car
-    for(int i=-1;i<=1;i++){
-        for(int j=-1;j<=1;j++){
-            occu_grid[(j+center_x)][occu_grid_y_size-(i+center_y)]=0;
-            listed_data[((j  + center_y)* occu_grid_x_size) + (i + center_x)]=0;
-        }
+    if (publish_rviz == true){
+        publish_grid(occugrid_flat);
     }
-    */
-
-
-    publish_grid(occugrid_flat);
     check_to_activate_obs_avoid(occugrid_flat);
 }
 
 void OBS_DETECT::check_to_activate_obs_avoid(std::vector<signed char> &occugrid_flat){
-    try{
-        //Calculate goal point
-        //Place the goal point 3m ahead of the car right now
-        /*
-        Eigen::Vector3d goal_local(3, 0, 0); 
-        Eigen::Vector3d goal_global = rotation_mat * goal_local;
-        goal_global[0] += current_car_pose.pose.pose.position.x; 
-        goal_global[1] += current_car_pose.pose.pose.position.y;
-        */
 
-        if (got_pose_flag == true){
-            int max_spline_idx = spline_points.size();
+    if (got_pose_flag == true){
+        int max_spline_idx = spline_points.size();
 
-            int increment = 10;
-            int iterations = 0;
-            bool run_check = true;
-            if (goal_spline_idx - car_spline_idx > 0){
-                iterations = (goal_spline_idx - car_spline_idx)/increment;
-            } else if (goal_spline_idx - car_spline_idx < 0) {
-                iterations = (max_spline_idx - car_spline_idx + goal_spline_idx)/increment;
-            } else{
-            run_check = false;
-            }
-
-            std::vector<std::vector<int>> grid_interp_points;
-            int goal_point[2]; 
-            spline_point2occu_coordinate(car_spline_idx, goal_point);
-            int origin_point[2] = {center_x, center_y};
-            std::vector<std::vector<int>> segment_interp_points;
-            segment_interp_points = draw_connecting_line(origin_point, goal_point);
-            grid_interp_points.insert(grid_interp_points.end(), segment_interp_points.begin(), segment_interp_points.end());
-
-            if (run_check == true){
-                int origin_idx;
-                int goal_idx = car_spline_idx;
-                for(int b=0; b <= iterations; b+=1){
-                    origin_idx = goal_idx;
-                    goal_idx += increment;
-                    if (goal_idx >= max_spline_idx){
-                        goal_idx = goal_idx - max_spline_idx;
-                    }
-                    if (origin_idx >= max_spline_idx){
-                        origin_idx = origin_idx - max_spline_idx;
-                    }
-                    if (b == iterations){
-                        goal_idx = goal_spline_idx;
-                    }
-
-                    //If on first iteration, connect car to spline
-                    int goal_point[2];
-                    int origin_point[2];
-                    spline_point2occu_coordinate(goal_idx, goal_point);
-
-                    if(b==0){
-                        origin_point[0] = center_x;
-                        origin_point[1] = center_y;
-                    } else { 
-                        spline_point2occu_coordinate(origin_idx, origin_point);
-                    }
-
-                    std::vector<std::vector<int>> segment_interp_points;
-                    segment_interp_points = draw_connecting_line(origin_point, goal_point);
-                    grid_interp_points.insert(grid_interp_points.end(), segment_interp_points.begin(), segment_interp_points.end());
-                }
-            }
-            std::vector<signed char> path_data(occu_grid_y_size * occu_grid_x_size);
-
-            for(int i=0;i<grid_interp_points.size();i++){
-                if(grid_interp_points[i][1] >= 0 && grid_interp_points[i][0] >= 0){
-                    //if( ((grid_interp_points[i][1])* occu_grid_x_size) + (grid_interp_points[i][0]) < (occu_grid_x_size * occu_grid_y_size)){
-                        if(((grid_interp_points[i][1])* occu_grid_x_size) + (grid_interp_points[i][0]) <path_data.size()){
-                            path_data[((grid_interp_points[i][1])* occu_grid_x_size) + (grid_interp_points[i][0])]=100;
-                        }
-                    //}
-                }
-            }
-            //Check if there is a collision!
-            use_coll_avoid = false;
-            for(int i=0;i<path_data.size();i++){
-                if(path_data[i]==100 && i < occugrid_flat.size() && occugrid_flat[i]==100){
-                    //hit_count++;
-                    use_coll_avoid = true;
-                    break;
-                }
-            }
-
-
-            publish_path(path_data);
-
-            auto use_coll_avoid_msg= std_msgs::msg::Bool();
-            use_coll_avoid_msg.data = use_coll_avoid;
-            use_avoid_pub->publish(use_coll_avoid_msg);
+        int increment = 10;
+        int iterations = 0;
+        bool run_check = true;
+        if (goal_spline_idx - car_spline_idx > 0){
+            iterations = (goal_spline_idx - car_spline_idx)/increment;
+        } else if (goal_spline_idx - car_spline_idx < 0) {
+            iterations = (max_spline_idx - car_spline_idx + goal_spline_idx)/increment;
+        } else{
+        run_check = false;
         }
 
+        std::vector<std::vector<int>> grid_interp_points;
+        int goal_point[2]; 
+        spline_point2occu_coordinate(car_spline_idx, goal_point);
+        int origin_point[2] = {center_x, center_y};
+        std::vector<std::vector<int>> segment_interp_points;
+        segment_interp_points = draw_connecting_line(origin_point, goal_point);
+        grid_interp_points.insert(grid_interp_points.end(), segment_interp_points.begin(), segment_interp_points.end());
+
+        if (run_check == true){
+            int origin_idx;
+            int goal_idx = car_spline_idx;
+            for(int b=0; b <= iterations; b+=1){
+                origin_idx = goal_idx;
+                goal_idx += increment;
+                if (goal_idx >= max_spline_idx){
+                    goal_idx = goal_idx - max_spline_idx;
+                }
+                if (origin_idx >= max_spline_idx){
+                    origin_idx = origin_idx - max_spline_idx;
+                }
+                if (b == iterations){
+                    goal_idx = goal_spline_idx;
+                }
+
+                //If on first iteration, connect car to spline
+                int goal_point[2];
+                int origin_point[2];
+                spline_point2occu_coordinate(goal_idx, goal_point);
+
+                if(b==0){
+                    origin_point[0] = center_x;
+                    origin_point[1] = center_y;
+                } else { 
+                    spline_point2occu_coordinate(origin_idx, origin_point);
+                }
+
+                std::vector<std::vector<int>> segment_interp_points;
+                segment_interp_points = draw_connecting_line(origin_point, goal_point);
+                grid_interp_points.insert(grid_interp_points.end(), segment_interp_points.begin(), segment_interp_points.end());
+            }
+        }
+        std::vector<signed char> path_data(occu_grid_y_size * occu_grid_x_size);
+
+        for(int i=0;i<grid_interp_points.size();i++){
+            if(grid_interp_points[i][1] >= 0 && grid_interp_points[i][0] >= 0){
+                //if( ((grid_interp_points[i][1])* occu_grid_x_size) + (grid_interp_points[i][0]) < (occu_grid_x_size * occu_grid_y_size)){
+                    if(((grid_interp_points[i][1])* occu_grid_x_size) + (grid_interp_points[i][0]) <path_data.size()){
+                        path_data[((grid_interp_points[i][1])* occu_grid_x_size) + (grid_interp_points[i][0])]=100;
+                    }
+                //}
+            }
+        }
+        //Check if there is a collision!
+        use_coll_avoid = false;
+        for(int i=0;i<path_data.size();i++){
+            if(path_data[i]==100 && i < occugrid_flat.size() && occugrid_flat[i]==100){
+                //hit_count++;
+                use_coll_avoid = true;
+                break;
+            }
+        }
+
+        if (publish_rviz == true){
+            publish_path(path_data);
+        }
+
+        auto use_coll_avoid_msg= std_msgs::msg::Bool();
+        use_coll_avoid_msg.data = use_coll_avoid;
+        use_avoid_pub->publish(use_coll_avoid_msg);
     }
-    catch(...){
-        std::cout<<"OBS_DETECT ACTIVATION FAILED"<<std::endl;
-    }
+
+    
 }
 
 
@@ -339,29 +334,22 @@ The connecting line is widened to ensure contact with other points
     std::vector<std::vector<int>> segment_interp_points;
     segment_interp_points = bresenhams_line_algorithm(goal_point, origin_point);
 
-    //Make Interp Points Wider
-    //Add 9 cm to each side
-    int add_val_x = abs((line_width_padding / resolution)); 
-    int add_val_y = abs((line_width_padding / resolution)); 
-    if(add_val_x==0){
-        add_val_x=1;
-    }
-    if(add_val_y==0){
-        add_val_y=1;
-    }
-
-    int size_val= segment_interp_points.size();
-    for(int i=0;i<size_val;i++){
-        for(int j=-add_val_y;j<add_val_y;j++){
-            for(int k=-add_val_x;k<add_val_x;k++){
-                if(segment_interp_points[i][0]+k >0 && segment_interp_points[i][0]+k <occu_grid_x_size){
-                    if( segment_interp_points[i][1]+j >0 && segment_interp_points[i][1]+j <occu_grid_y_size){
-                        int x_val = segment_interp_points[i][0]+k;
-                        int y_val = segment_interp_points[i][1]+j;
-                        std::vector<int> add_points{x_val,y_val};
-                        if(x_val >0 && x_val <occu_grid_x_size){
-                            if( y_val >0 && y_val <occu_grid_y_size){
-                                segment_interp_points.push_back(add_points);
+    if (path_line_padding == true){
+        int add_val_x = 1;
+        int add_val_y = 1;
+        int size_val= segment_interp_points.size();
+        for(int i=0;i<size_val;i++){
+            for(int j=-add_val_y;j<add_val_y;j++){
+                for(int k=-add_val_x;k<add_val_x;k++){
+                    if(segment_interp_points[i][0]+k >0 && segment_interp_points[i][0]+k <occu_grid_x_size){
+                        if( segment_interp_points[i][1]+j >0 && segment_interp_points[i][1]+j <occu_grid_y_size){
+                            int x_val = segment_interp_points[i][0]+k;
+                            int y_val = segment_interp_points[i][1]+j;
+                            std::vector<int> add_points{x_val,y_val};
+                            if(x_val >0 && x_val <occu_grid_x_size){
+                                if( y_val >0 && y_val <occu_grid_y_size){
+                                    segment_interp_points.push_back(add_points);
+                                }
                             }
                         }
                     }
