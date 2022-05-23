@@ -30,6 +30,7 @@ class PurePursuit(Node):
         create_custom_vel_profile = True
         self.sim_flag = True  # Set flag true for simulation, false for real
         self.speed_override = None #Set to None for there to be no speed override
+        self.publish_rviz = False
 
         # Define paths
         pkg_dir = os.path.join(os.getcwd(), 'src','pure_pursuit_pkg', 'pure_pursuit_pkg')
@@ -39,16 +40,15 @@ class PurePursuit(Node):
         #### PURE PURSUIT ###
         # Pure pursuit parameters
         self.pp_steer_L = 1.5  # steering look ahead for pure pursuit
-        self.kp = 0.25##0.6
-        self.kp_rrt = 0.5#
-        self.v_max = 10.0#3#5 #8 #6
-        self.v_min = 3.5#0.4# #2.5 #1.5  # This value is NOT used for calculations... only keeps the car above a certain value
+        self.kp = 0.25 ##0.6
+        self.kp_rrt = 0.5 #
+        self.v_max = 10.0 #3#5 #8 #6
+        self.v_min = 3.5 # This value is NOT used for calculations... only keeps the car above a certain value
         self.ay_max = 5.0#0.1#3
         self.ax_max = 6.0#0.1#3
         self.floor_friction_coeff = 1.0#0.2#1.0 #0.8 #0.4
         self.k = 3.0 #3 #5  # Curvature Scaling Factor
         self.offset = 0.0  # Offset to make car brake before turn, and accelerate out of turn units in spline index steps
-
         self.spline_index_car = 0  # Index of the car on the spline
 
         # Convert waypoints to spline
@@ -80,19 +80,23 @@ class PurePursuit(Node):
         else:
             self.pose_subscriber = self.create_subscription(Odometry, 'pf/pose/odom', self.pose_callback, 1)
 
-        self.current_goal_publisher = self.create_publisher(PointStamped, 'pp_current_goal_rviz',1)
-        self.spline_publisher = self.create_publisher(Marker, 'pp_spline_rviz',1)
+        if self.publish_rviz:
+            self.current_goal_publisher = self.create_publisher(PointStamped, 'pp_current_goal_rviz',1)
+            self.spline_publisher = self.create_publisher(Marker, 'pp_spline_rviz',1)
+            self.color_points_publisher = self.create_publisher(MarkerArray, 'color_points_rviz', 1)
+
         self.drive_publisher = self.create_publisher(AckermannDriveStamped, 'drive', 1)
         self.global_goal_publisher = self.create_publisher(Odometry, 'global_goal_pure_pursuit', 1)
         self.use_obs_avoid_subscriber = self.create_subscription(Bool, 'use_obs_avoid', self.use_obs_avoid_callback, 1)
-        self.color_points_publisher = self.create_publisher(MarkerArray, 'color_points_rviz', 1)
+        
+        self.local_goal = Odometry()
 
         #For rviz
-        self.spline_data = self.populate_spline_data()
-        self.timer = self.create_timer(2, self.create_spline)#Publish Spline
-        self.local_goal = Odometry()
-        self.color_data = self.populate_color_spline_points()
-        self.timer = self.create_timer(2, self.publish_color_points)
+        if self.publish_rviz:
+            self.spline_data = self.populate_spline_data()
+            self.timer = self.create_timer(2, self.create_spline)#Publish Spline
+            self.color_data = self.populate_color_spline_points()
+            self.timer = self.create_timer(2, self.publish_color_points)
 
 
     def pose_callback(self, pose_msg):
@@ -110,7 +114,8 @@ class PurePursuit(Node):
         # Calculate goal point
         global_goal_point = self.find_goal_point(self.pp_steer_L)
         local_goal_point = self.global_2_local(current_quat, current_position, global_goal_point)
-        self.publish_current_goal_point(global_goal_point)  # Create RVIZ Purple Dot
+        if self.publish_rviz:
+            self.publish_current_goal_point(global_goal_point)  # Create RVIZ Purple Dot
 
         # Decide if using pure pursuit
         if not self.use_obs_avoid:
