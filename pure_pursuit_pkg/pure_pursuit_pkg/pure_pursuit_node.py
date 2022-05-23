@@ -25,9 +25,11 @@ class PurePursuit(Node):
         super().__init__('pure_pursuit_node')
 
         # User inputs
-        traj_csv = "good_real_points.csv" #Name of csv in racelines directory
+        traj_csv = "icra_1st.csv" #Name of csv in racelines directory
+        tum_raceline = True
+        create_custom_vel_profile = True
         self.sim_flag = True  # Set flag true for simulation, false for real
-        self.speed_override = 3.0 #Set to None for there to be no speed override
+        self.speed_override = None #Set to None for there to be no speed override
 
         # Define paths
         pkg_dir = os.path.join(os.getcwd(), 'src','pure_pursuit_pkg', 'pure_pursuit_pkg')
@@ -50,19 +52,27 @@ class PurePursuit(Node):
         self.spline_index_car = 0  # Index of the car on the spline
 
         # Convert waypoints to spline
-        self.pp_waypoints = load_from_csv(traj_csv, clicked=True, scaler=1)
-        spline_data, m = interpolate.splprep([self.pp_waypoints[:, 0], self.pp_waypoints[:, 1]], s=0, per=True)
-        self.pp_x_spline, self.pp_y_spline = interpolate.splev(np.linspace(0, 1, 1000), spline_data)
+        if tum_raceline:
+            self.pp_waypoints, self.drive_velocity = load_from_csv(traj_csv, TUM=tum_raceline)
+            self.pp_x_spline = self.pp_waypoints[:,0]
+            self.pp_y_spline = self.pp_waypoints[:,1]
+        else: 
+            self.pp_waypoints, self.drive_velocity = load_from_csv(traj_csv, TUM=tum_raceline)
+        
+        if create_custom_vel_profile:
+            spline_data, m = interpolate.splprep([self.pp_waypoints[:, 0], self.pp_waypoints[:, 1]], s=0, per=True)
+            self.pp_x_spline, self.pp_y_spline = interpolate.splev(np.linspace(0, 1, 1000), spline_data)
+            self.drive_velocity = np.roll(self.calculate_velocity_profile(self.pp_x_spline, self.pp_y_spline), - self.offset)
+
         self.pp_spline_points = np.vstack((self.pp_x_spline, self.pp_y_spline, np.zeros((len(self.pp_y_spline)))))
+            
         with open(os.path.join(pkg_dir, 'racelines', 'temp', 'spline.csv'), 'w', newline='') as csvfile:
                 writer = csv.writer(csvfile, delimiter=',')
                 for i in range(len(self.pp_x_spline)):
                         writer.writerow([self.pp_x_spline[i], self.pp_y_spline[i]])
-        self.drive_velocity = np.roll(self.calculate_velocity_profile(self.pp_x_spline, self.pp_y_spline), - self.offset)
 
         #### Obstacle Avoidance ###
         self.use_obs_avoid = False
-        self.obs_avoid_L = 3.0
 
         ### ROS PUB/SUB ###
         if self.sim_flag:
@@ -74,14 +84,15 @@ class PurePursuit(Node):
         self.spline_publisher = self.create_publisher(Marker, 'pp_spline_rviz',1)
         self.drive_publisher = self.create_publisher(AckermannDriveStamped, 'drive', 1)
         self.global_goal_publisher = self.create_publisher(Odometry, 'global_goal_pure_pursuit', 1)
-        self.global_goal_obs_avoid_publisher = self.create_publisher(Odometry, 'global_goal_obs_avoid', 1)
         self.use_obs_avoid_subscriber = self.create_subscription(Bool, 'use_obs_avoid', self.use_obs_avoid_callback, 1)
+        self.color_points_publisher = self.create_publisher(MarkerArray, 'color_points_rviz', 1)
 
         #For rviz
         self.spline_data = self.populate_spline_data()
         self.timer = self.create_timer(2, self.create_spline)#Publish Spline
         self.local_goal = Odometry()
         self.color_data = self.populate_color_spline_points()
+        self.timer = self.create_timer(2, self.publish_color_points)
 
 
     def pose_callback(self, pose_msg):
@@ -123,16 +134,6 @@ class PurePursuit(Node):
         global_goal.pose.pose.position.y = float(global_goal_point[1])
         global_goal.pose.pose.position.z = float(global_goal_point[2])
         self.global_goal_publisher.publish(global_goal)
-
-        # Global Goal for Obstacle Avoidance
-        global_goal_point_obs_avoid = self.find_goal_point(self.obs_avoid_L)
-        global_goal = Odometry()
-        global_goal.header.frame_id = "map"
-        global_goal.header.stamp = self.get_clock().now().to_msg()
-        global_goal.pose.pose.position.x = float(global_goal_point_obs_avoid[0])
-        global_goal.pose.pose.position.y = float(global_goal_point_obs_avoid[1])
-        global_goal.pose.pose.position.z = float(global_goal_point_obs_avoid[2])
-        self.global_goal_obs_avoid_publisher.publish(global_goal)
 
     def calc_steer(self, goal_point_car, kp):
         """
@@ -339,6 +340,9 @@ class PurePursuit(Node):
 
     def create_spline(self):
         self.spline_publisher.publish(self.spline_data)
+
+    def publish_color_points(self):
+        self.color_points_publisher.publish(self.color_data)
     
     def find_goal_point(self, L):
         # Returns the global x,y,z position of the goal point
@@ -388,9 +392,11 @@ class PurePursuit(Node):
 
         return vel_new
 
-def load_from_csv(traj_csv, clicked=False, scaler=10):
+def load_from_csv(traj_csv, TUM=False, scaler=1):
     # Open csv and read the waypoint data
-    if clicked:
+    points = None
+    velocity = None
+    if not TUM:
         with open(traj_csv, 'r') as f:
             lines = (line for line in f if not line.startswith('#'))
             data = np.loadtxt(lines, delimiter=',')
@@ -401,8 +407,10 @@ def load_from_csv(traj_csv, clicked=False, scaler=10):
             lines = (line for line in f if not line.startswith('#'))
             data = np.loadtxt(lines, delimiter=';')
         points = data[:, 1:3] / scaler
+        velocity = data[:, 5]
 
-    return points
+
+    return points, velocity
 
 def main(args=None):
     rclpy.init(args=args)
