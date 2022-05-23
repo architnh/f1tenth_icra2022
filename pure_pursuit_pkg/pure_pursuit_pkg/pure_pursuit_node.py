@@ -27,9 +27,9 @@ class PurePursuit(Node):
         # User inputs
         traj_csv = "icra_1st.csv" #Name of csv in racelines directory
         tum_raceline = True
-        create_custom_vel_profile = False
+        create_custom_vel_profile = True
         self.sim_flag = False  # Set flag True for simulation, False for real
-        self.speed_override = 2.0  #Set to None for there to be no speed override
+        self.speed_override = None #Set to None for there to be no speed override
         self.publish_rviz = True
 
         # Define paths
@@ -42,8 +42,8 @@ class PurePursuit(Node):
         self.pp_steer_L = 1.5  # steering look ahead for pure pursuit
         self.kp = 0.25 ##0.6
         self.kp_rrt = 0.5 #
-        self.v_max = 10.0 #3#5 #8 #6
-        self.v_min = 3.5 # This value is NOT used for calculations... only keeps the car above a certain value
+        self.v_max = 5.0 #3#5 #8 #6
+        self.v_min = 1.5 # This value is NOT used for calculations... only keeps the car above a certain value
         self.ay_max = 5.0#0.1#3
         self.ax_max = 6.0#0.1#3
         self.floor_friction_coeff = 1.0#0.2#1.0 #0.8 #0.4
@@ -126,6 +126,7 @@ class PurePursuit(Node):
                 drive_speed = self.v_min
             msg = AckermannDriveStamped()
             if self.speed_override is None:
+                print(drive_speed)
                 msg.drive.speed = float(drive_speed)###CHANGE THIS BACK, IN SIM THE CHANGING VELOCITY WAS CAUSING PROBLEMS
             else:
                 msg.drive.speed = self.speed_override

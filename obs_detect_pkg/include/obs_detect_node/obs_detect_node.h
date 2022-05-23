@@ -40,6 +40,9 @@ public:
     bool publish_rviz = true;
     bool publish_thetas = false;
 
+    //Settings
+    int collision_loop_threshold = 15;
+
     //Grid Settings
     bool scan_padding = false;
     bool path_line_padding=true;
@@ -50,7 +53,7 @@ public:
     int occu_grid_y_size_max = 3 / resolution; //Meters
 
     
-    float collision_time_buffer = 2.0; //s
+    float collision_time_buffer = 0.5; //s
 
 
     //Define Occupancy Grid Parameters
@@ -79,6 +82,7 @@ public:
     int car_spline_idx = 0;
     int goal_spline_idx = 100;
     bool got_pose_flag = false;
+    int collision_detect_counter = 0;
 
     //Gap stuff
     float max_range_threshold = 10.0;

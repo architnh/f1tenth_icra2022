@@ -233,8 +233,20 @@ void OBS_DETECT::check_to_activate_obs_avoid(std::vector<signed char> &occugrid_
         }
 
         auto use_coll_avoid_msg= std_msgs::msg::Bool();
-        use_coll_avoid_msg.data = use_coll_avoid;
+        if (use_coll_avoid==true){
+            use_coll_avoid_msg.data = use_coll_avoid;
+            collision_detect_counter = 0;
+        } else {
+            collision_detect_counter+=1;
+            if (collision_detect_counter < collision_loop_threshold){
+                use_coll_avoid_msg.data = true;
+            } else {
+                use_coll_avoid_msg.data = false;
+            }
+
+        }
         use_avoid_pub->publish(use_coll_avoid_msg);
+        
     }
 
     
