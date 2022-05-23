@@ -27,14 +27,14 @@ class PurePursuit(Node):
         # User inputs
         traj_csv = "icra_1st.csv" #Name of csv in racelines directory
         tum_raceline = True
-        create_custom_vel_profile = True
-        self.sim_flag = True  # Set flag true for simulation, false for real
+        create_custom_vel_profile = False
+        self.sim_flag = False  # Set flag True for simulation, False for real
         self.speed_override = None #Set to None for there to be no speed override
-        self.publish_rviz = False
+        self.publish_rviz = True
 
         # Define paths
-        pkg_dir = os.path.join(os.getcwd(), 'src','pure_pursuit_pkg', 'pure_pursuit_pkg')
-        #pkg_dir = os.path.join(os.getcwd(), 'src', 'f1tenth_icra2022','pure_pursuit_pkg', 'pure_pursuit_pkg')
+        #pkg_dir = os.path.join(os.getcwd(), 'src','pure_pursuit_pkg', 'pure_pursuit_pkg')
+        pkg_dir = os.path.join(os.getcwd(), 'src', 'f1tenth_icra2022','pure_pursuit_pkg', 'pure_pursuit_pkg')
         traj_csv = os.path.join(pkg_dir, 'racelines', traj_csv)
 
         #### PURE PURSUIT ###
