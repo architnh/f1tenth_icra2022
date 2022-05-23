@@ -36,12 +36,13 @@ public:
 
     ///////////USER INPUT////////////
     //Flags
+    bool sim = false;  // Set flag true for simulation, false for real
     bool publish_rviz = true;
     bool publish_thetas = false;
 
     //Grid Settings
     bool scan_padding = false;
-    bool path_line_padding=false;
+    bool path_line_padding=true;
     const float  resolution = 0.1;
     int occu_grid_x_size_min = 2 / resolution; //Meters
     int occu_grid_y_size_min = 2 / resolution; //Meters
