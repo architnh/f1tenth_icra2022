@@ -34,14 +34,14 @@ class PurePursuit(Node):
 
         # Define paths
         #pkg_dir = os.path.join(os.getcwd(), 'src','pure_pursuit_pkg', 'pure_pursuit_pkg')
-        pkg_dir = os.path.join(os.getcwd(), 'src', 'f1tenth_icra2022','pure_pursuit_pkg', 'pure_pursuit_pkg')
+        pkg_dir = os.path.join(os.getcwd(), 'src', 'pure_pursuit_pkg', 'pure_pursuit_pkg')
         traj_csv = os.path.join(pkg_dir, 'racelines', traj_csv)
 
         #### PURE PURSUIT ###
         # Pure pursuit parameters
         self.pp_steer_L_fast = 2.5  # steering look ahead for pure pursuit
-        self.pp_steer_L_slow = 1.0
-        self.kp_fast = 0.25
+        self.pp_steer_L_slow = 1.5
+        self.kp_fast = 0.35
         self.kp_slow = 0.5
         self.L_threshold_speed = 3.5 # This is the speed that triggers the slower lookahead
 
@@ -132,9 +132,9 @@ class PurePursuit(Node):
         
         # Calculate steer angle
         if drive_speed > self.L_threshold_speed:
-            steering_angle = self.calc_steer(local_goal_point, self.kp_fast)
+            steering_angle = self.calc_steer(local_goal_point, self.kp_fast, self.pp_steer_L_fast)
         else:
-            steering_angle = self.calc_steer(local_goal_point, self.kp_slow)
+            steering_angle = self.calc_steer(local_goal_point, self.kp_slow, self.pp_steer_L_slow)
 
 
         if self.publish_rviz:
@@ -144,6 +144,7 @@ class PurePursuit(Node):
         if not self.use_obs_avoid:
             msg = AckermannDriveStamped()
             msg.drive.steering_angle = float(steering_angle)
+            msg.drive.speed = float(drive_speed)
             self.drive_publisher.publish(msg)
         
         # Global Goal for RRT
@@ -155,13 +156,13 @@ class PurePursuit(Node):
         global_goal.pose.pose.position.z = float(global_goal_point[2])
         self.global_goal_publisher.publish(global_goal)
 
-    def calc_steer(self, goal_point_car, kp):
+    def calc_steer(self, goal_point_car, kp, L):
         """
         Returns the steering angle from the local goal point
         """
         y = goal_point_car[1]
         steer_dir = np.sign(y)
-        r = self.pp_steer_L ** 2 / (2 * np.abs(y))
+        r = L ** 2 / (2 * np.abs(y))
         gamma = 1 / r
         steering_angle = (gamma * kp * steer_dir)
         return steering_angle
