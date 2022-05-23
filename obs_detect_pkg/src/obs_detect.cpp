@@ -131,8 +131,8 @@ void OBS_DETECT::scan_callback(const sensor_msgs::msg::LaserScan::ConstSharedPtr
             y_scan = scan_msg->ranges[i] * sin(scan_msg->angle_increment * i + scan_msg->angle_min) / resolution;
 
             if (scan_padding == true){
-                for(int j=-1 + x_scan;j<1+ x_scan;j++){//8
-                    for(int k=-1 + y_scan;k<1 + y_scan;k++){
+                for(int j=-1 + x_scan;j<2+ x_scan;j++){//8
+                    for(int k=-1 + y_scan;k<2 + y_scan;k++){
                         if(j+center_x >0 && j+center_x <occu_grid_x_size){
                             if(k+center_y >0 && k+center_y <occu_grid_y_size){
                                 occugrid_flat[((k  + center_y)* occu_grid_x_size) + (j + center_x)]=100;
@@ -334,13 +334,32 @@ The connecting line is widened to ensure contact with other points
     std::vector<std::vector<int>> segment_interp_points;
     segment_interp_points = bresenhams_line_algorithm(goal_point, origin_point);
 
+
     if (path_line_padding == true){
         int add_val_x = 1;
         int add_val_y = 1;
+        int x_val;
+        int y_val;
         int size_val= segment_interp_points.size();
+
+        //Add point +1/-1 in the y direction
+        for(int i=0; i<size_val; i++){
+            x_val = segment_interp_points[i][0];
+            y_val = segment_interp_points[i][1] + 1; 
+            if (y_val > 0 && y_val < occu_grid_y_size){
+                std::vector<int> added_point{x_val, y_val};
+                segment_interp_points.push_back(added_point);
+            } 
+            y_val = segment_interp_points[i][1] - 1; 
+            if (y_val > 0 && y_val < occu_grid_y_size){
+                std::vector<int> added_point{x_val, y_val};
+                segment_interp_points.push_back(added_point);
+            }
+        }
+        /*
         for(int i=0;i<size_val;i++){
-            for(int j=-add_val_y;j<add_val_y;j++){
-                for(int k=-add_val_x;k<add_val_x;k++){
+            for(int j=-add_val_y;j<=add_val_y;j++){
+                for(int k=-add_val_x;k<=add_val_x;k++){
                     if(segment_interp_points[i][0]+k >0 && segment_interp_points[i][0]+k <occu_grid_x_size){
                         if( segment_interp_points[i][1]+j >0 && segment_interp_points[i][1]+j <occu_grid_y_size){
                             int x_val = segment_interp_points[i][0]+k;
@@ -356,6 +375,7 @@ The connecting line is widened to ensure contact with other points
                 }
             }
         }
+        */
     }
     return segment_interp_points;
 }
