@@ -36,7 +36,7 @@ public:
 
     ///////////USER INPUT////////////
     //Flags
-    bool sim = false;  // Set flag true for simulation, false for real
+    bool sim = true;  // Set flag true for simulation, false for real
     bool publish_rviz = true;
     bool publish_thetas = false;
 
@@ -47,10 +47,10 @@ public:
     bool scan_padding = false;
     bool path_line_padding=true;
     const float  resolution = 0.1;
-    int occu_grid_x_size_min = 2 / resolution; //Meters
-    int occu_grid_y_size_min = 2 / resolution; //Meters
-    int occu_grid_x_size_max = 5 / resolution; //Meters
-    int occu_grid_y_size_max = 3 / resolution; //Meters
+    int occu_grid_x_size_min = 4.0 / resolution; //Meters
+    int occu_grid_y_size_min = 2.0 / resolution; //Meters
+    int occu_grid_x_size_max = 4.0/ resolution; //Meters
+    int occu_grid_y_size_max = 2.0 / resolution; //Meters
 
     
     float collision_time_buffer = 0.5; //s
@@ -95,8 +95,8 @@ public:
 
 private:
     //Spline points location
-    std::string spline_file_name = "src/f1tenth_icra2022/pure_pursuit_pkg/pure_pursuit_pkg/racelines/temp/spline.csv";
-    //std::string spline_file_name = "src/pure_pursuit_pkg/pure_pursuit_pkg/racelines/temp/spline.csv";
+    //std::string spline_file_name = "src/f1tenth_icra2022/pure_pursuit_pkg/pure_pursuit_pkg/racelines/temp/spline.csv";
+    std::string spline_file_name = "src/pure_pursuit_pkg/pure_pursuit_pkg/racelines/temp/spline.csv";
 
 
     //Publishers 
