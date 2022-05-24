@@ -34,7 +34,7 @@ class ReactiveFollowGap : public rclcpp::Node {
         float max_range_threshold = 10.0; //Anything beyond this value is set to this value
         float max_drive_range_threshold = 9.0;
 
-        float car_width_bubble = 0.5; //Changes the size of the bubble set close
+        float car_width_bubble = 1.2; //Changes the size of the bubble set close
         float car_width_disp = 0.5; //Changes the size of disparity extension
         float angle_cutoff = 2.1;//1.5; //radians
         float disp_threshold = .4;//meter
@@ -110,7 +110,7 @@ class ReactiveFollowGap : public rclcpp::Node {
             drive_angle = find_drive_angle(ranges_p, angles_p, gap_idxes, drive_idx);
 
             bool going_to_hit=false;
-            //going_to_hit = corner_safety_check(ranges_raw, angles_raw, drive_angle, num_readings, angle_increment);
+            going_to_hit = corner_safety_check(ranges_raw, angles_raw, drive_angle, num_readings, angle_increment);
 
             // Publish Drive message
             if (going_to_hit==true){
@@ -125,7 +125,9 @@ class ReactiveFollowGap : public rclcpp::Node {
 
             auto drive_msg = ackermann_msgs::msg::AckermannDriveStamped();
             drive_msg.drive.steering_angle = drive_angle;
-            drive_msg.drive.speed = drive_speed_calc(drive_angle, vel_max, vel_min); //Scales the velocity from the pure pursuit velocity to some lower bound, depending on the distance of range readings... maybe steer angle would be better? 
+            std::cout<<"Drive angle :"<<drive_angle<<std::endl;
+            std::cout<<"Drive idx : "<<drive_idx<<std::endl;
+            drive_msg.drive.speed = 0.0; drive_speed_calc(drive_angle, vel_max, vel_min); //Scales the velocity from the pure pursuit velocity to some lower bound, depending on the distance of range readings... maybe steer angle would be better? 
             drive_publisher->publish(drive_msg);
             
         }
@@ -356,7 +358,7 @@ class ReactiveFollowGap : public rclcpp::Node {
             theta = atan2((car_width_bubble /2.0), ranges[bubble_idx]);
             n_float = theta/angle_increment; //Is 270 radians!!!!
             n = static_cast<int>(n_float);
-            //RCLCPP_INFO(this->get_logger(), "Bubble CLOSE- idx [%d], angle[%f], N value [%f], range [%f]", bubble_idx, angles[bubble_idx], n_float, ranges[bubble_idx]);
+            RCLCPP_INFO(this->get_logger(), "Bubble CLOSE- idx [%d], angle[%f], N value [%f], range [%f]", bubble_idx, angles[bubble_idx], n_float, ranges[bubble_idx]);
 
 
             //Cases to fix out of bounds errors
