@@ -119,6 +119,9 @@ class ReactiveFollowGap : public rclcpp::Node {
             if (drive_angle > max_drive_angle){
                 drive_angle = max_drive_angle;
             }
+            if (drive_angle < -1 * max_drive_angle){
+                drive_angle = -1 * max_drive_angle;
+            }
 
             auto drive_msg = ackermann_msgs::msg::AckermannDriveStamped();
             drive_msg.drive.steering_angle = drive_angle;
