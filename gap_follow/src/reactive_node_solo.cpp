@@ -36,7 +36,7 @@ class ReactiveFollowGap : public rclcpp::Node {
 
         float car_width = .60; //Meters
 
-        float angle_cutoff = 1.5; //radians
+        float angle_cutoff = 2.1;//1.5; //radians
         float disp_threshold = .4;//meter
         float bubble_dist_threshold = 6; //meteres
 
