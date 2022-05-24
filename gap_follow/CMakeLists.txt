@@ -43,6 +43,11 @@ ament_target_dependencies(null_node
   rclcpp geometry_msgs ackermann_msgs nav_msgs sensor_msgs std_msgs
 )
 
+add_executable(reactive_node_solo src/reactive_node_solo.cpp)
+ament_target_dependencies(null_node
+  rclcpp geometry_msgs ackermann_msgs nav_msgs sensor_msgs std_msgs
+)
+
 # Install Cpp executables
 install(TARGETS
   reactive_node
