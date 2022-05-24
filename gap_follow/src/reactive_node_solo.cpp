@@ -381,7 +381,7 @@ class ReactiveFollowGap : public rclcpp::Node {
         }
 
         float drive_speed_calc(float steer_angle, float max_drive_speed, float min_drive_speed){
-            float drive_speed = max_drive_speed - ((steer_angle/max_drive_angle) * (max_drive_speed - min_drive_speed));          
+            float drive_speed = max_drive_speed - ((abs(steer_angle)/max_drive_angle) * (max_drive_speed - min_drive_speed));          
 
             return drive_speed;
         }
