@@ -42,13 +42,15 @@ public:
 
     //Settings
     int collision_loop_threshold = 15; //How many clear path loops need to run before pure pursuit turns off
+    //Turning this value up makes follow the gap stay on longer
+
 
     //Grid Settings
-    bool scan_padding = false;
-    bool path_line_padding=true;
-    const float  resolution = 0.1;
-    int occu_grid_x_size= 4.0 / resolution;
-    int occu_grid_y_size= 4.0 / resolution;
+    bool scan_padding = false; //Makes the track too cluttered
+    bool path_line_padding=true; //Makes the path we check wider than one pixel
+    const float  resolution = 0.1; //Meters per pixel of the occugrid
+    int occu_grid_x_size= 4.0 / resolution; //Meters 
+    int occu_grid_y_size= 2.0 / resolution; //Meters
     float collision_time_buffer = 0.5; //s
     int center_y = occu_grid_y_size/2;
     int center_x = 4;
