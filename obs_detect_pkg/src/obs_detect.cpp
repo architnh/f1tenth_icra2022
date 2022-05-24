@@ -89,33 +89,6 @@ void OBS_DETECT::scan_callback(const sensor_msgs::msg::LaserScan::ConstSharedPtr
     int y_goal = (local_goal[1]/resolution) + center_y;
 
     
-    if (x_goal > occu_grid_x_size_min && x_goal < occu_grid_x_size_max){
-        occu_grid_x_size = x_goal + 3;
-    } else if (x_goal >= occu_grid_x_size_max){
-        occu_grid_x_size = occu_grid_x_size_max;
-    } else{
-        occu_grid_x_size = occu_grid_x_size_min;
-    }
-
-    if (y_goal < 0){
-        if ((occu_grid_y_size_min - y_goal) >= occu_grid_y_size_max){
-            occu_grid_y_size = occu_grid_y_size_max;
-        } else {
-            occu_grid_y_size = occu_grid_y_size_min - y_goal + 3;
-        }
-        center_y = occu_grid_y_size - center_y_min;
-    } else if(y_goal > occu_grid_y_size_min){
-        if ((occu_grid_y_size_min + y_goal) >= occu_grid_y_size_max){
-            occu_grid_y_size = occu_grid_y_size_max;
-        } else {
-            occu_grid_y_size = y_goal + 3;
-        }
-        center_y = center_y_min;
-    } else {
-        occu_grid_y_size = occu_grid_y_size_min;
-        center_y = center_y_min;
-    }
-    
     std::vector<signed char> occugrid_flat(occu_grid_y_size * occu_grid_x_size);
 
     //Build the occupancy grid

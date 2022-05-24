@@ -13,6 +13,7 @@ from geometry_msgs.msg import PointStamped
 from ackermann_msgs.msg import AckermannDriveStamped, AckermannDrive
 from nav_msgs.msg import Odometry
 from std_msgs.msg import Bool
+from std_msgs.msg import Int16
 from visualization_msgs.msg import Marker
 from visualization_msgs.msg import MarkerArray
 
@@ -43,7 +44,7 @@ class PurePursuit(Node):
         self.pp_steer_L_slow = 1.5
         self.kp_fast = 0.35
         self.kp_slow = 0.5
-        self.L_threshold_speed = 3.5 # This is the speed that triggers the slower lookahead
+        self.L_threshold_speed = 4.0 # This is the speed that triggers the slower lookahead
 
         #Velocity profile parameters
         self.v_max = 5.0 #3#5 #8 #6
@@ -76,6 +77,11 @@ class PurePursuit(Node):
                 for i in range(len(self.pp_x_spline)):
                         writer.writerow([self.pp_x_spline[i], self.pp_y_spline[i]])
 
+        with open(os.path.join(pkg_dir, 'racelines', 'temp', 'velocity.csv'), 'w', newline='') as csvfile:
+                writer = csv.writer(csvfile, delimiter=',')
+                for i in range(len(self.pp_x_spline)):
+                        writer.writerow([self.drive_velocity[i]])
+
         #### Obstacle Avoidance ###
         self.use_obs_avoid = False
 
@@ -90,6 +96,7 @@ class PurePursuit(Node):
             self.spline_publisher = self.create_publisher(Marker, 'pp_spline_rviz',1)
             self.color_points_publisher = self.create_publisher(MarkerArray, 'color_points_rviz', 1)
 
+        self.spline_index_publisher = self.create_publisher(Int16, 'car_spline_index', 1)
         self.drive_publisher = self.create_publisher(AckermannDriveStamped, 'drive', 1)
         self.global_goal_publisher = self.create_publisher(Odometry, 'global_goal_pure_pursuit', 1)
         self.use_obs_avoid_subscriber = self.create_subscription(Bool, 'use_obs_avoid', self.use_obs_avoid_callback, 1)
@@ -115,6 +122,7 @@ class PurePursuit(Node):
 
         # get the current spline index of the car and goal point
         self.spline_index_car = self.get_closest_point_to_car(current_position, self.pp_spline_points)
+        self.publish_spline_index()
 
         #Determine the speed from the velocity profile
         drive_speed = self.drive_velocity[self.spline_index_car]
@@ -231,6 +239,12 @@ class PurePursuit(Node):
         goal_point_car = np.linalg.inv(H_global2car) @ goal_point_global
 
         return goal_point_car
+
+    def publish_spline_index(self):
+        message = Int16()
+        message.data = int(self.spline_index_car)
+        self.spline_index_publisher.publish(message)
+
 
     def populate_color_spline_points(self):
         array_values=MarkerArray()

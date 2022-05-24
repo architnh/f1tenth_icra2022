@@ -41,28 +41,16 @@ public:
     bool publish_thetas = false;
 
     //Settings
-    int collision_loop_threshold = 15;
+    int collision_loop_threshold = 15; //How many clear path loops need to run before pure pursuit turns off
 
     //Grid Settings
     bool scan_padding = false;
     bool path_line_padding=true;
     const float  resolution = 0.1;
-    int occu_grid_x_size_min = 2 / resolution; //Meters
-    int occu_grid_y_size_min = 2 / resolution; //Meters
-    int occu_grid_x_size_max = 5 / resolution; //Meters
-    int occu_grid_y_size_max = 3 / resolution; //Meters
-
-    
+    int occu_grid_x_size= 4.0 / resolution;
+    int occu_grid_y_size= 4.0 / resolution;
     float collision_time_buffer = 0.5; //s
-
-
-    //Define Occupancy Grid Parameters
-    int occu_grid_x_size=occu_grid_x_size_min;
-    int occu_grid_y_size=occu_grid_y_size_min;
-    int x_size=  occu_grid_x_size/resolution;  
-    int y_size= occu_grid_y_size/resolution;  
-    int center_y_min = occu_grid_y_size_min/2;
-    int center_y = center_y_min;
+    int center_y = occu_grid_y_size/2;
     int center_x = 4;
     
     //Pose information
