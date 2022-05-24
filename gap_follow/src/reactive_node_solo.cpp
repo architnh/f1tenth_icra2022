@@ -116,6 +116,7 @@ class ReactiveFollowGap : public rclcpp::Node {
             if (going_to_hit==true){
                 drive_angle = 0.0;
             }
+            drive_msg.drive.steering_angle = drive_angle;
             drive_msg.drive.speed = drive_speed_calc(drive_angle, vel_max, vel_min); //Scales the velocity from the pure pursuit velocity to some lower bound, depending on the distance of range readings... maybe steer angle would be better? 
             drive_publisher->publish(drive_msg);
             
