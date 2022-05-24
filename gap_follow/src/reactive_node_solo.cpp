@@ -32,10 +32,10 @@ class ReactiveFollowGap : public rclcpp::Node {
         // variables
         int window_size = 3; //This is the size of the "window" for the window mean
         float max_range_threshold = 10.0; //Anything beyond this value is set to this value
-        float max_drive_range_threshold = 5.0;
+        float max_drive_range_threshold = 9.0;
 
-        float car_width = .60; //Meters
-
+        float car_width_bubble = 0.5; //Changes the size of the bubble set close
+        float car_width_disp = 0.5; //Changes the size of disparity extension
         float angle_cutoff = 2.1;//1.5; //radians
         float disp_threshold = .4;//meter
         float bubble_dist_threshold = 6; //meteres
@@ -230,7 +230,6 @@ class ReactiveFollowGap : public rclcpp::Node {
             int deepest_idx;
             float drive_angle;
 
-
             for(int i = gap_idx[0]; i<gap_idx[1]; i++){
                 if(ranges[i] > deepest_val){
                     deepest_val = ranges[i];
@@ -300,7 +299,7 @@ class ReactiveFollowGap : public rclcpp::Node {
                   continue;
                 }
 
-                theta = atan2((car_width /2.0), bubble_dist);
+                theta = atan2((car_width_disp /2.0), bubble_dist);
                 n_float = theta/angle_increment; //Is 270 radians!!!!
                 n = static_cast<int>(n_float);
                 //RCLCPP_INFO(this->get_logger(), "Bubble idx [%d], N value [%d], Theta [%f],  Bubble range [%f]", bubble_idx, n, theta, ranges_clean[bubble_idx]);
@@ -354,7 +353,7 @@ class ReactiveFollowGap : public rclcpp::Node {
             bubble_idx = close_idx;
 
             //Use trig to find number of points to eliminate
-            theta = atan2((car_width /2.0), ranges[bubble_idx]);
+            theta = atan2((car_width_bubble /2.0), ranges[bubble_idx]);
             n_float = theta/angle_increment; //Is 270 radians!!!!
             n = static_cast<int>(n_float);
             //RCLCPP_INFO(this->get_logger(), "Bubble CLOSE- idx [%d], angle[%f], N value [%f], range [%f]", bubble_idx, angles[bubble_idx], n_float, ranges[bubble_idx]);
