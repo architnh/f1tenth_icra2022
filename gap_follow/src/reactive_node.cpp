@@ -5,6 +5,10 @@
 #include "nav_msgs/msg/odometry.hpp"
 #include "ackermann_msgs/msg/ackermann_drive_stamped.hpp"
 #include "std_msgs/msg/bool.hpp"
+#include "std_msgs/msg/int16.hpp"
+#include <fstream>
+#include <iostream>
+
 
 /// CHECK: include needed ROS msg type headers and libraries
 
@@ -23,6 +27,28 @@ class ReactiveFollowGap : public rclcpp::Node {
             drive_publisher = this->create_publisher<ackermann_msgs::msg::AckermannDriveStamped>(drive_topic, 1);
             scan_sub = this->create_subscription<sensor_msgs::msg::LaserScan>(lidarscan_topic, 1, std::bind(&ReactiveFollowGap::lidar_callback, this, _1));
             gap_sub = this->create_subscription<std_msgs::msg::Bool>(decision_topic, 1, std::bind(&ReactiveFollowGap::gap_callback, this, _1));
+            car_index_sub = this->create_subscription<std_msgs::msg::Int16>(index_topic, 1, std::bind(&ReactiveFollowGap::index_callback, this, _1));
+
+            //Read in velocity points
+            std::string velocity_file_name = "src/pure_pursuit_pkg/pure_pursuit_pkg/racelines/temp/velocity.csv";
+            std::vector<float> row;
+            std::string line, number;
+            std::fstream file (velocity_file_name, std::ios::in);
+            if(file.is_open())
+            {
+                std::cout<<"Velocity file open!"<<std::endl;
+                while(getline(file, line))
+                {
+                    std::stringstream str(line);
+                    while(getline(str, number, ','))
+                        velocity_points.push_back(std::stof(number));
+                }
+            }
+            else{ 
+                std::cout<<"ERROR_ERROR_ERROR"<<std::endl;
+                std::cout<<"OBS_DETECT.CPP Failed to open spline csv"<<std::endl;
+            }
+
         }
         bool use_gap = false;
 
@@ -32,22 +58,26 @@ class ReactiveFollowGap : public rclcpp::Node {
         float max_range_threshold = 10.0; //Anything beyond this value is set to this value
         float max_drive_range_threshold = 5.0;
 
-        float min_drive_speed = 2.0; //meters per sec
-        float max_drive_speed =  3.0; // meters/sec
         float car_width = .60; //Meters
 
         float angle_cutoff = 1.5; //radians
         float disp_threshold = .4;//meter
         float bubble_dist_threshold = 6; //meteres
+        std::vector<float> velocity_points; 
+        int car_spline_index = 0;
+        
 
         std::string lidarscan_topic = "/scan";
         std::string drive_topic = "/drive";
         std::string decision_topic = "/use_obs_avoid";
+        std::string index_topic = "/car_index";
 
         /// Create ROS subscribers and publishers
         rclcpp::Subscription<sensor_msgs::msg::LaserScan>::SharedPtr scan_sub;
         rclcpp::Subscription<std_msgs::msg::Bool>::SharedPtr gap_sub;
         rclcpp::Publisher<ackermann_msgs::msg::AckermannDriveStamped>::SharedPtr drive_publisher;
+        rclcpp::Subscription<std_msgs::msg::Int16>::SharedPtr car_index_sub;
+
 
 
         void lidar_callback(const sensor_msgs::msg::LaserScan::ConstSharedPtr scan_msg)
@@ -118,8 +148,8 @@ class ReactiveFollowGap : public rclcpp::Node {
                     drive_msg.drive.steering_angle = 0;
 
                 }
-                drive_msg.drive.speed = drive_speed_calc(ranges_p, angles_p, num_readings_p);
-
+                float spline_velocity = velocity_points[car_spline_index]; 
+                drive_msg.drive.speed = drive_speed_calc(ranges_p, angles_p, num_readings_p, spline_velocity, (spline_velocity-2.0)); //Scales the velocity from the pure pursuit velocity to some lower bound, depending on the distance of range readings... maybe steer angle would be better? 
                 drive_publisher->publish(drive_msg);
             }
         }
@@ -374,7 +404,7 @@ class ReactiveFollowGap : public rclcpp::Node {
             }
         }
 
-        float drive_speed_calc(std::vector<float>& ranges, std::vector<float>& angles, int num_readings){
+        float drive_speed_calc(std::vector<float>& ranges, std::vector<float>& angles, int num_readings, float max_drive_speed, float min_drive_speed){
             //Get average range in front facing window
             float drive_speed;
 
@@ -459,6 +489,12 @@ class ReactiveFollowGap : public rclcpp::Node {
         void gap_callback(const std_msgs::msg::Bool::ConstSharedPtr gap_bool)
         {
             use_gap = gap_bool->data;
+        }
+
+        void index_callback(const std_msgs::msg::Int16::ConstSharedPtr index_val)
+        {
+            car_spline_index = index_val->data;
+            std::cout<<"Got index value: "<<car_spline_index<<std::endl;
         }
 
 };
