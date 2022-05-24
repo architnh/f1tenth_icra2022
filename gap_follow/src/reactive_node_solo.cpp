@@ -110,7 +110,7 @@ class ReactiveFollowGap : public rclcpp::Node {
             drive_angle = find_drive_angle(ranges_p, angles_p, gap_idxes, drive_idx);
 
             bool going_to_hit=false;
-            going_to_hit = corner_safety_check(ranges_raw, angles_raw, drive_angle, num_readings, angle_increment);
+            //going_to_hit = corner_safety_check(ranges_raw, angles_raw, drive_angle, num_readings, angle_increment);
 
             // Publish Drive message
             if (going_to_hit==true){
