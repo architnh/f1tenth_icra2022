@@ -44,7 +44,7 @@ ament_target_dependencies(null_node
 )
 
 add_executable(reactive_node_solo src/reactive_node_solo.cpp)
-ament_target_dependencies(null_node
+ament_target_dependencies(reactive_node_solo
   rclcpp geometry_msgs ackermann_msgs nav_msgs sensor_msgs std_msgs
 )
 
