@@ -148,8 +148,8 @@ class ReactiveFollowGap : public rclcpp::Node {
                     drive_msg.drive.steering_angle = 0;
 
                 }
-                float spline_velocity = velocity_points[car_spline_index];
-                drive_msg.drive.speed = drive_speed_calc(ranges_p, angles_p, num_readings_p, spline_velocity, (spline_velocity-2.0));
+                float spline_velocity = velocity_points[car_spline_index]; 
+                drive_msg.drive.speed = drive_speed_calc(ranges_p, angles_p, num_readings_p, spline_velocity, (spline_velocity-2.0)); //Scales the velocity from the pure pursuit velocity to some lower bound, depending on the distance of range readings... maybe steer angle would be better? 
                 drive_publisher->publish(drive_msg);
             }
         }
