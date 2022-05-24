@@ -48,6 +48,7 @@ install(TARGETS
   reactive_node
   reactive_node_opp
   null_node
+  reactive_node_solo
   DESTINATION lib/${PROJECT_NAME})
 
 # Install Python modules
