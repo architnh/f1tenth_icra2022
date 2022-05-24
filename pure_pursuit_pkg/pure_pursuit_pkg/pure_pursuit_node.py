@@ -26,7 +26,7 @@ class PurePursuit(Node):
         super().__init__('pure_pursuit_node')
 
         # User inputs
-        traj_csv = "0524_icra_raceline.csv" #Name of csv in racelines directory
+        traj_csv = "raceline latest.csv" #Name of csv in racelines directory
         tum_raceline = True
         create_custom_vel_profile = True
         self.sim_flag = False  # Set flag True for simulation, False for real
@@ -47,7 +47,7 @@ class PurePursuit(Node):
         self.L_threshold_speed = 4.0 # This is the speed that triggers the slower lookahead
 
         #Velocity profile parameters
-        self.v_max = 5.0 #3#5 #8 #6
+        self.v_max = 3.5 #3#5 #8 #6
         self.v_min = 1.5 # This value is NOT used for calculations... only keeps the car above a certain value
         self.ay_max = 5.0#0.1#3
         self.ax_max = 6.0#0.1#3
