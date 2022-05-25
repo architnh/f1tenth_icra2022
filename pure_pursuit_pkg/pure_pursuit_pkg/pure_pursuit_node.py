@@ -34,8 +34,8 @@ class PurePursuit(Node):
         self.publish_rviz = True
 
         # Define paths
-        pkg_dir = os.path.join(os.getcwd(), 'src','pure_pursuit_pkg', 'pure_pursuit_pkg')
-        #pkg_dir = os.path.join(os.getcwd(), 'src', 'f1tenth_icra2022', 'pure_pursuit_pkg', 'pure_pursuit_pkg')
+        #pkg_dir = os.path.join(os.getcwd(), 'src','pure_pursuit_pkg', 'pure_pursuit_pkg')
+        pkg_dir = os.path.join(os.getcwd(), 'src', 'f1tenth_icra2022', 'pure_pursuit_pkg', 'pure_pursuit_pkg')
         traj_csv = os.path.join(pkg_dir, 'racelines', traj_csv)
 
         #### PURE PURSUIT ###
