@@ -26,7 +26,7 @@ class PurePursuit(Node):
         super().__init__('pure_pursuit_node')
 
         # User inputs
-        traj_csv = "new_traj_new_map.csv" #Name of csv in racelines directory
+        traj_csv = "0525_raceline.csv" #Name of csv in racelines directory
         tum_raceline = True
         create_custom_vel_profile = True
         self.sim_flag = False  # Set flag True for simulation, False for real
@@ -58,7 +58,7 @@ class PurePursuit(Node):
 
         # Convert waypoints to spline
         if tum_raceline:
-            self.pp_waypoints, self.drive_velocity = load_from_csv(traj_csv, TUM=False)
+            self.pp_waypoints, self.drive_velocity = load_from_csv(traj_csv, TUM=tum_raceline)
             self.pp_waypoints = np.flip(self.pp_waypoints, 0)
             self.pp_x_spline = self.pp_waypoints[:,0]
             self.pp_y_spline = self.pp_waypoints[:,1]
@@ -66,10 +66,8 @@ class PurePursuit(Node):
             self.pp_waypoints, self.drive_velocity = load_from_csv(traj_csv, TUM=tum_raceline)
         
         if create_custom_vel_profile:
-            """
             spline_data, m = interpolate.splprep([self.pp_waypoints[:, 0], self.pp_waypoints[:, 1]], s=0, per=True)
             self.pp_x_spline, self.pp_y_spline = interpolate.splev(np.linspace(0, 1, 1000), spline_data)
-            """
             self.drive_velocity = np.roll(self.calculate_velocity_profile(self.pp_x_spline, self.pp_y_spline), - self.offset)
 
         self.pp_spline_points = np.vstack((self.pp_x_spline, self.pp_y_spline, np.zeros((len(self.pp_y_spline)))))
