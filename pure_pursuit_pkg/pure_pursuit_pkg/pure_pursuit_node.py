@@ -29,27 +29,27 @@ class PurePursuit(Node):
         traj_csv = "0525_raceline.csv" #Name of csv in racelines directory
         tum_raceline = True
         create_custom_vel_profile = True
-        self.sim_flag = False  # Set flag True for simulation, False for real
+        self.sim_flag = True  # Set flag True for simulation, False for real
         self.speed_override = None #Set to None for there to be no speed override
         self.publish_rviz = True
 
         # Define paths
-        #pkg_dir = os.path.join(os.getcwd(), 'src','pure_pursuit_pkg', 'pure_pursuit_pkg')
-        pkg_dir = os.path.join(os.getcwd(), 'src', 'f1tenth_icra2022', 'pure_pursuit_pkg', 'pure_pursuit_pkg')
+        pkg_dir = os.path.join(os.getcwd(), 'src','pure_pursuit_pkg', 'pure_pursuit_pkg')
+        #pkg_dir = os.path.join(os.getcwd(), 'src', 'f1tenth_icra2022', 'pure_pursuit_pkg', 'pure_pursuit_pkg')
         traj_csv = os.path.join(pkg_dir, 'racelines', traj_csv)
 
         #### PURE PURSUIT ###
         # Pure pursuit parameters
         self.pp_steer_L_fast = 2.5  # steering look ahead for pure pursuit
-        self.pp_steer_L_slow = 1.5
+        self.pp_steer_L_slow = 1.25
         self.kp_fast = 0.35
         self.kp_slow = 0.5
         self.L_threshold_speed = 4.0 # This is the speed that triggers the slower lookahead
 
         #Velocity profile parameters
-        self.v_max = 3.5 #3#5 #8 #6
+        self.v_max = 4.5 #3#5 #8 #6
         self.v_min = 1.5 # This value is NOT used for calculations... only keeps the car above a certain value
-        self.ay_max = 5.0#0.1#3
+        self.ay_max = 4.0#0.1#3
         self.ax_max = 6.0#0.1#3
         self.floor_friction_coeff = 1.0#0.2#1.0 #0.8 #0.4
         self.k = 3.0 #3 #5  # Curvature Scaling Factor
@@ -59,7 +59,7 @@ class PurePursuit(Node):
         # Convert waypoints to spline
         if tum_raceline:
             self.pp_waypoints, self.drive_velocity = load_from_csv(traj_csv, TUM=tum_raceline)
-            self.pp_waypoints = np.flip(self.pp_waypoints, 0)
+            #self.pp_waypoints = np.flip(self.pp_waypoints, 0)
             self.pp_x_spline = self.pp_waypoints[:,0]
             self.pp_y_spline = self.pp_waypoints[:,1]
         else: 

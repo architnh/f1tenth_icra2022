@@ -36,7 +36,7 @@ public:
 
     ///////////USER INPUT////////////
     //Flags
-    bool sim = false;  // Set flag true for simulation, false for real
+    bool sim = true;  // Set flag true for simulation, false for real
     bool publish_rviz = true;
     bool publish_thetas = false;
 
@@ -85,8 +85,8 @@ public:
 
 private:
     //Spline points location
-    std::string spline_file_name = "src/f1tenth_icra2022/pure_pursuit_pkg/pure_pursuit_pkg/racelines/temp/spline.csv";
-    //std::string spline_file_name = "src/pure_pursuit_pkg/pure_pursuit_pkg/racelines/temp/spline.csv";
+    //std::string spline_file_name = "src/f1tenth_icra2022/pure_pursuit_pkg/pure_pursuit_pkg/racelines/temp/spline.csv";
+    std::string spline_file_name = "src/pure_pursuit_pkg/pure_pursuit_pkg/racelines/temp/spline.csv";
 
 
     //Publishers 
